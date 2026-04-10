@@ -8,7 +8,8 @@ Ingesters are the services that connect data sources to the WeSense network. Eac
 |----------|------------|--------|-------|
 | **wesense-ingester-wesense** | WeSense ESP32 sensors (WiFi + LoRa + TTN webhook) | Production | Primary ingester for WeSense hardware |
 | **wesense-ingester-meshtastic** | Meshtastic mesh network | Production | Supports public and community modes |
-| **wesense-ingester-homeassistant** | Home Assistant REST/WebSocket API | Pending testing | Coded, awaiting field testing |
+| **wesense-ingester-homeassistant** | Home Assistant REST/WebSocket API | Pending testing | Standalone ingester — pulls data from HA via API |
+| **wesense-ha-plugin** | Home Assistant add-on | Coming soon | Native HA integration — will be available in the HACS community store |
 | **wesense-ingester-govaq-nz** | NZ government air quality (ECan + Hilltop councils) | Production | Reference-grade station data |
 | **wesense-ingester-ecowitt** | Ecowitt weather stations (direct) | Coming soon | Direct integration without Home Assistant |
 
