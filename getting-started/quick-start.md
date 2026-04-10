@@ -15,7 +15,7 @@ Port: 8883 (MQTTS)
 
 Your data will be ingested, geocoded, and appear on the [live map](https://map.wesense.earth). See the [MQTT topic structure](/developers/data-schema#mqtt-topic-structure) for payload format.
 
-If you're running **Home Assistant**, see the [Home Assistant / Ecowitt guide](/getting-started/home-assistant) — there's a dedicated ingester that pulls data from your HA instance. Direct Ecowitt integration (without Home Assistant) is coming soon.
+**Home Assistant** and **Ecowitt** integrations are coming soon — see [Ingester Status](/developers/ingesters) for current progress.
 
 ## I want to build a sensor
 
@@ -31,7 +31,7 @@ Build a WeSense node using an ESP32 board and environmental sensors. It connects
 
 ### LoRaWAN (no WiFi needed)
 
-If your sensor location doesn't have WiFi, you can transmit over LoRaWAN via The Things Network (TTN). You'll need a LoRaWAN gateway within range (check [TTN coverage](https://www.thethingsnetwork.org/map)).
+If your sensor location doesn't have WiFi, you can transmit over LoRaWAN via The Things Network (TTN). This requires a public TTN gateway to be available in your region — check coverage on the [TTN Mapper](https://ttnmapper.org) or the [official TTN map](https://www.thethingsnetwork.org/map).
 
 The simplest option is to use the default WeSense TTN credentials built into the firmware — just flash, and your sensor connects to the WeSense TTN application automatically. If you prefer to run your own TTN application, you can register a free account on [The Things Network](https://www.thethingsnetwork.org/) and configure the firmware with your own credentials.
 

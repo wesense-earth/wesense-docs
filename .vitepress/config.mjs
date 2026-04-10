@@ -48,6 +48,7 @@ export default defineConfig({
         collapsed: false,
         items: [
           { text: 'Architecture Overview', link: '/developers/architecture' },
+          { text: 'Ingesters', link: '/developers/ingesters' },
           { text: 'Writing an Ingester', link: '/developers/writing-an-ingester' },
           { text: 'Data Schema Reference', link: '/developers/data-schema' },
           { text: 'Contributing Code', link: '/developers/contributing-code' },
