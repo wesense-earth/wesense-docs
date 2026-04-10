@@ -13,6 +13,7 @@ export default defineConfig({
     siteTitle: 'WeSense',
 
     nav: [
+      { text: 'Features', link: '/features' },
       { text: 'Get Started', link: '/getting-started/quick-start' },
       { text: 'Run a Station', link: '/station-operators/operate-a-station' },
       { text: 'Develop', link: '/developers/architecture' },
@@ -21,6 +22,13 @@ export default defineConfig({
     ],
 
     sidebar: [
+      {
+        text: 'Overview',
+        collapsed: false,
+        items: [
+          { text: 'Features', link: '/features' },
+        ],
+      },
       {
         text: 'Getting Started',
         collapsed: false,

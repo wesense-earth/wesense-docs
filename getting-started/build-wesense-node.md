@@ -14,13 +14,15 @@ Any of these supported boards will work. The firmware auto-detects your board ty
 | **ESP32-C3 Generic** | No | Compact, budget-friendly | AliExpress, Amazon | ~$4-8 |
 | **ESP32-C6 Beetle / Generic** | No | WiFi 6, compact | AliExpress, Amazon | ~$6-10 |
 | **ESP32-S3 Generic** | No | More processing power | AliExpress, Amazon | ~$8-15 |
-| **[T-Beam v1.x](https://www.lilygo.cc/products/t-beam-v1-1-esp32-lora-module) (Lilygo)** | Yes (SX1276) | LoRaWAN + GPS + battery/solar | [Lilygo](https://www.lilygo.cc) | ~$30-50 |
-| **[T-Beam T3 S3 v1.2](https://www.lilygo.cc/products/t-beam-s3-core) (Lilygo)** | Yes (SX1262) | LoRaWAN + GPS + battery/solar | [Lilygo](https://www.lilygo.cc) | ~$35-55 |
+| **[T-Beam v1.x](https://www.lilygo.cc/products/t-beam-v1-1-esp32-lora-module) (Lilygo)** | Yes (SX1276) | LoRaWAN + GPS + built-in 18650 battery holder + solar | [Lilygo](https://www.lilygo.cc) | ~$40-65 |
+| **[T-Beam T3 S3 v1.2](https://www.lilygo.cc/products/t-beam-s3-core) (Lilygo)** | Yes (SX1262) | LoRaWAN + GPS + LiPo battery socket + solar | [Lilygo](https://www.lilygo.cc) | ~$35-55 |
 
 ::: info About the T-Beam LoRa boards
-Both T-Beam models include built-in battery holders (18650), solar charge controllers, and GPS. The T-Beam T3 S3 also has an external battery connector. Either board can run fully off-grid with a small solar panel.
+Both T-Beam models include solar charge controllers and GPS, and can run fully off-grid with a small solar panel.
 
-The SX1262 radio in the T3 S3 is the newer generation — despite the lower model number, it has better range and lower power consumption than the SX1276 in the v1.x. If buying new, the T3 S3 is the better choice.
+The **T-Beam v1.x** has a built-in 18650 battery holder — convenient but makes the board larger and limits you to one battery form factor. It tends to be more expensive.
+
+The **T-Beam T3 S3** has a LiPo battery socket instead — more compact, and you can connect any LiPo battery you like. It uses the newer SX1262 LoRa radio which, despite the lower model number, has better range and lower power consumption than the SX1276 in the v1.x. If buying new, the T3 S3 is the better choice.
 :::
 
 ### 2. Sensors
