@@ -18,7 +18,7 @@ The WeSense firmware runs on ESP32 boards and handles everything from sensor rea
 - **NTP time synchronisation** — accurate timestamps on every reading, with daylight saving support
 
 ### Remote Management
-- **MQTT command interface** — calibrate sensors, update location, restart device, toggle LEDs, check status — all remotely via MQTT
+- **MQTT command interface** — calibrate sensors, update location, restart device, toggle LEDs, check status — all remotely via MQTT or a GUI like [MQTT Explorer](https://mqtt-explorer.com)
 - **Remote serial logging** via Telnet — connect to your sensor's debug output over the network, no USB cable needed
 - **Syslog support** — forward diagnostic logs to a remote syslog server
 - **Boasting URL** — point your node to a URL showing how you set it up, shared with the network
@@ -26,11 +26,11 @@ The WeSense firmware runs on ESP32 boards and handles everything from sensor rea
 ### Deployment Flexibility
 - **Indoor, outdoor, and mixed** installation types — the firmware tags readings with deployment context
 - **Privacy offset** — configurable coordinate offset so your data represents your neighbourhood without revealing your exact address
-- **Deep sleep support** — for battery/solar LoRaWAN deployments where power is limited (note: some sensors need recalibration after deep sleep)
+- **Deep sleep support** — for battery/solar LoRaWAN deployments where power is limited. Not supported by all sensors — check that your sensors resume correctly after a deep sleep cycle before relying on this.
 - **Disable individual sensors** — turn off specific sensors in software, even individual sensors within multi-sensor boards
 
 ### Calibration & Reliability
-- **Calibration persistence** — sensor calibration state is saved to NVS and survives power cycles and firmware updates. CO2 sensors that take 7 days to calibrate don't lose progress.
+- **Calibration persistence** — sensor calibration state is saved to NVS and designed to survive power cycles and firmware updates, so CO2 sensors that take 7 days to calibrate don't lose progress. This capability is implemented but still being evaluated for reliability — consider it alpha-quality for now.
 - **Calibration state tracking** — the firmware knows which sensors are still warming up and suppresses their data until calibration is complete
 - **Data quality protection** — readings are only published when time sync is confirmed, preventing timestampless data from entering the network
 
@@ -48,6 +48,8 @@ The WeSense firmware runs on ESP32 boards and handles everything from sensor rea
 
 See [Recommended Sensors](/getting-started/recommended-sensors) for our picks and why.
 
+> Have a sensor that's not listed here? [Submit it on GitHub](https://github.com/wesense-earth/wesense-sensor-firmware/issues) and we'll prioritise adding support — assuming it's not a very drifty sensor, of course.
+
 ---
 
 ## Data Platform
@@ -59,13 +61,26 @@ See [Recommended Sensors](/getting-started/recommended-sensors) for our picks an
 
 ### Storage & Access
 - **ClickHouse** time-series database — fast queries over billions of readings
-- **IPFS archiving** — daily Parquet archives stored on the permanent web
+- **Parquet archiving** — daily archives exported in open Parquet format, readable by ClickHouse, Pandas, DuckDB, Apache Spark, and most data science tools
 - **Free and open data** — all sensor data is accessible to anyone, forever
 
 ### P2P Network
-- **Iroh archive replication** — archives are distributed across stations via P2P with zero central dependency
+
+The WeSense network distributes data across community-operated stations via peer-to-peer, so no single point of failure can lose the data. Stations choose what to store based on their available resources:
+
+| Storage Scope | What Gets Stored | Who It's For |
+|--------------|-----------------|-------------|
+| `nz/wgn` | Just Wellington | A sensor operator backing up their local area |
+| `nz/*` | All of New Zealand | A regional guardian covering their country |
+| `nz/*,au/*` | New Zealand and Australia | A regional node serving Oceania |
+| `*/*` | Everything on the network | A world node — the ultimate backup |
+
+The more nodes that store a region's data, the more copies exist, and the more resilient that data becomes. Serving is automatic — everything in your store is available for any peer to pull.
+
+**Key technologies:**
+- **Iroh archive replication** — Parquet archives distributed across stations via P2P with zero central dependency
 - **Zenoh live distribution** — real-time sensor data streamed between stations via P2P
-- **Community-driven replication** — the more stations, the more resilient the data
+- **Community-driven replication** — operators choose their storage scope, and the network self-heals as nodes join and leave
 
 ### Visualisation
 - **Live sensor map** ([map.wesense.earth](https://map.wesense.earth)) — see sensor data in real time
@@ -81,3 +96,4 @@ See the [Roadmap](https://wesense.earth/#roadmap) for planned features, includin
 - Home Assistant add-on via HACS
 - CGNAT/dynamic IP support via DERP relays
 - Hardware enclosure designs for 3D printing
+- Network storage size dashboard (total data by world, country, and region)

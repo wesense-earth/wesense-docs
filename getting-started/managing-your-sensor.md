@@ -132,7 +132,7 @@ mosquitto_pub -h mqtt.wesense.earth -p 8883 \
   -m ""
 ```
 
-You can also use MQTT Explorer, Home Assistant's MQTT integration, or any MQTT dashboard to send commands and view responses.
+You can also use a GUI like [MQTT Explorer](https://mqtt-explorer.com), Home Assistant's MQTT integration, or any MQTT dashboard to send commands and view responses.
 
 ## CO2 Calibration Tips
 

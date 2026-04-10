@@ -60,7 +60,18 @@ Stations are the backbone of the WeSense network. There are several types depend
 | **Guardian** | Full stack (MQTT, ClickHouse, Ingesters, Map, P2P) | Stores, serves, and replicates data for your region — the most valuable station type |
 | **Hub** | MQTT broker only | Acts as a public MQTT entry point for sensors in your area |
 
-A **Guardian** station is the most impactful — it stores sensor data in ClickHouse, archives it to IPFS, and replicates archives across the P2P network so no single point of failure can lose the data. The more guardians, the more resilient the network.
+A **Guardian** station is the most impactful — it stores sensor data in ClickHouse, archives it in Parquet format, and replicates archives across the P2P network so no single point of failure can lose the data. The more guardians, the more resilient the network.
+
+As a guardian, you choose your **storage scope** — how much of the network's data you store and serve:
+
+| Scope | What You Store | Disk Usage |
+|-------|---------------|------------|
+| Your subdivision (e.g. `nz/wgn`) | Just your local area | Minimal |
+| Your country (e.g. `nz/*`) | All data for your country | Moderate |
+| A region (e.g. `nz/*,au/*`) | Multiple countries | Larger |
+| Everything (`*/*`) | The entire network | World node — largest |
+
+The network needs nodes at every level to ensure data is backed up and available. Even storing just your local area helps.
 
 All station types run as Docker Compose profiles on a Raspberry Pi, home server, or NAS. See [Operate a Station](/station-operators/operate-a-station) for the setup guide, or [Deployment Profiles](/station-operators/deployment-profiles) for details on each type.
 
@@ -74,7 +85,7 @@ All sensor data contributed to WeSense is:
 
 - **Free and open** — anyone can access it, forever
 - **Stored in ClickHouse** — queryable time-series database
-- **Archived to IPFS** — permanent, decentralised storage
+- **Archived in Parquet** — open format readable by ClickHouse, Pandas, DuckDB, Apache Spark, and most data science tools
 - **Replicated via P2P** — distributed across stations so no single point of failure
 - **Visible on the [live map](https://map.wesense.earth)** — within seconds of arriving
 
