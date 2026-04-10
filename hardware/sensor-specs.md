@@ -139,5 +139,4 @@ Download the [complete sensor comparison spreadsheet](/datasheets/WeSense%20-%20
 
 ## Datasheets
 
-- [CM1106-C CO2 Sensor (PDF)](/datasheets/CM1106-C.pdf)
-- [Aliexpress C8 CO2 Sensor (PDF)](/datasheets/Aliexpress%20C8%20CO2%20Sensor.pdf)
+All datasheets are available on the [Recommended Sensors](/getting-started/recommended-sensors#datasheets) page.

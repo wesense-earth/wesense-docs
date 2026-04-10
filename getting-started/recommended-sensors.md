@@ -395,7 +395,48 @@ For the complete dataset with all 50+ sensors, download the [full sensor compari
 
 ## Datasheets
 
-- [CM1106-C CO2 Sensor (PDF)](/datasheets/CM1106-C.pdf)
-- [Aliexpress C8 CO2 Sensor (PDF)](/datasheets/Aliexpress%20C8%20CO2%20Sensor.pdf)
+### Temperature & Humidity
+- [SHT4x — SHT40, SHT41, SHT45 (Sensirion)](/datasheets/SHT4x.pdf)
+- [TMP117 (Texas Instruments)](/datasheets/TMP117.pdf)
+- [SHTC3 (Sensirion)](/datasheets/SHTC3.pdf)
+- [AHT20 (Aosong)](/datasheets/AHT20.pdf)
 
-> We're working on collecting datasheets for all supported sensors. If you have a datasheet we're missing, please [contribute via GitHub](https://github.com/wesense-earth/wesense-docs).
+### CO2
+- [SCD30 (Sensirion)](/datasheets/SCD30.pdf)
+- [SCD4x — SCD40, SCD41 (Sensirion)](/datasheets/SCD4x.pdf)
+- [CM1106-C (Winsen)](/datasheets/CM1106-C.pdf)
+
+### Pressure
+- [BMP390 (Bosch)](/datasheets/BMP390.pdf)
+- [MS5611 (TE Connectivity)](/datasheets/MS5611.pdf)
+- [BME280 (Bosch)](/datasheets/BME280.pdf)
+- [BMP280 (Bosch)](/datasheets/BMP280.pdf)
+
+### Particulate Matter
+- [SPS30 (Sensirion)](/datasheets/SPS30.pdf)
+- [PMS5003 (Plantower)](/datasheets/PMS5003.pdf)
+- [SDS011 (Nova Fitness)](/datasheets/SDS011.pdf)
+
+### Air Quality (VOC/NOx)
+- [SGP41 (Sensirion)](/datasheets/SGP41.pdf)
+- [SGP40 (Sensirion)](/datasheets/SGP40.pdf)
+- [BME680 (Bosch)](/datasheets/BME680.pdf)
+
+### Light & UV
+- [TSL2591 (ams-OSRAM)](/datasheets/TSL2591.pdf)
+- [LTR-390UV (Lite-On)](/datasheets/LTR-390UV.pdf)
+- [BH1750 (ROHM)](/datasheets/BH1750.pdf)
+
+### Power Monitoring
+- [INA226 (Texas Instruments)](/datasheets/INA226.pdf)
+- [INA219 (Texas Instruments)](/datasheets/INA219.pdf)
+
+### Noise
+- [INMP441 (InvenSense/TDK)](/datasheets/INMP441.pdf)
+
+### Multi-Sensor Modules
+- [SEN5x — SEN54, SEN55 (Sensirion)](/datasheets/SEN5x.pdf)
+- [SEN6x — SEN66, SEN68 (Sensirion)](/datasheets/SEN6x.pdf)
+
+### Other
+- [Aliexpress C8 CO2 Sensor](/datasheets/Aliexpress%20C8%20CO2%20Sensor.pdf)
