@@ -42,3 +42,7 @@ features:
     link: /data/why-durability-over-accuracy
     linkText: Read the evidence
 ---
+
+::: warning Work in Progress
+These documents are currently being written and are in draft format. Content is being added progressively — some pages may be incomplete or contain placeholder sections. If you'd like to help improve the documentation, every page has an "Edit this page on GitHub" link at the bottom.
+:::
