@@ -95,45 +95,26 @@ PMS5003 and C8 CO2 sensors require 5V power. Connect VCC to the board's VIN or 5
 
 ## Flash the Firmware
 
-### Option 1: Arduino IDE
+See [Firmware Setup](/getting-started/firmware-setup) for the complete guide — Arduino IDE installation, board selection, partition scheme, USB CDC, library installation, and flashing.
 
-1. Install the [Arduino IDE](https://www.arduino.cc/en/software)
-2. Add ESP32 board support: **File → Preferences → Additional Board Manager URLs**, add:
-   ```
-   https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-   ```
-3. Install the ESP32 boards: **Tools → Board → Boards Manager**, search for "esp32" and install
-4. Select your board: **Tools → Board → ESP32 Arduino → [Your Board]**
-5. **Change the partition scheme**: **Tools → Partition Scheme → Minimal SPIFFS (1.9MB APP with OTA/190KB SPIFFS)**
+The short version:
 
-   ::: warning Required step
-   The default partition is too small for the WeSense firmware. If you see "Sketch too big" errors, this is the first thing to check.
-   :::
-
-6. Clone or download the firmware: [github.com/wesense-earth/wesense-sensor-firmware](https://github.com/wesense-earth/wesense-sensor-firmware)
-7. Open `wesense-sensor-firmware.ino` in Arduino IDE
-8. Install required libraries (the IDE will prompt you, or see the repo README)
-9. Connect your board via USB
-10. Click **Upload**
-
-### Option 2: Pre-built Binary (coming soon)
-
-<!-- TODO: Add web-based ESP flasher instructions when available -->
+1. Install [Arduino IDE](https://www.arduino.cc/en/software) with ESP32 board support
+2. Select your board, set **Partition Scheme → Minimal SPIFFS**, enable **USB CDC On Boot** (C3/C6/S3 boards)
+3. Install the required libraries (see [Firmware Setup](/getting-started/firmware-setup#install-libraries) for the full list)
+4. Edit your configuration (see below)
+5. Click **Upload**
 
 ## Configure
 
-Edit the configuration section at the top of `wesense-sensor-firmware.ino` before flashing:
-
-### WiFi & MQTT (minimum required)
+At minimum, you need to set your WiFi credentials in `credentials.h`:
 
 ```cpp
-const char* wifi_ssid = "YourWiFiNetwork";
-const char* wifi_password = "YourWiFiPassword";
+#define WIFI_SSID "YourWiFiNetwork"
+#define WIFI_PASSWORD "YourWiFiPassword"
 ```
 
-By default, the firmware connects to `mqtt.wesense.earth` on port 8883 (encrypted). You don't need to change the MQTT settings unless you're running your own station.
-
-### Location (optional but recommended)
+And optionally set your location in `wesense-sensor-firmware.ino`:
 
 ```cpp
 const bool INCLUDE_LOCATION_IN_MQTT = true;
@@ -141,28 +122,9 @@ const float FIXED_LATITUDE = -36.8485;
 const float FIXED_LONGITUDE = 174.7633;
 ```
 
-Set your approximate location so your data appears on the map. You can offset your coordinates for privacy — your data will still be useful at neighbourhood level without revealing your exact address.
+Everything else has sensible defaults — the firmware connects to `mqtt.wesense.earth` with TLS encryption automatically.
 
-T-Beam boards with GPS will determine location automatically.
-
-### LoRaWAN (for LoRa boards only)
-
-The default WeSense TTN credentials are built into the firmware. For most users, just set the regional frequency plan:
-
-```cpp
-#define LORAWAN_REGION_AU915  // Australia/New Zealand
-// #define LORAWAN_REGION_EU868  // Europe
-// #define LORAWAN_REGION_US915  // North America
-// #define LORAWAN_REGION_AS923  // Asia-Pacific
-```
-
-If you prefer to use your own TTN application, replace the credentials in the firmware. See the [Configuration wiki](https://github.com/wesense-earth/wesense-sensor-firmware/wiki/Configuration) for full LoRaWAN setup instructions.
-
-### TLS (encrypted MQTT)
-
-Enabled by default when connecting to `mqtt.wesense.earth`. The firmware includes the ISRG Root X1 CA certificate (Let's Encrypt root, valid until 2035), so encrypted connections work without any configuration.
-
-For LAN-only deployments with self-signed certificates, see the [Configuration wiki](https://github.com/wesense-earth/wesense-sensor-firmware/wiki/Configuration).
+See [Firmware Configuration](/getting-started/firmware-configuration) for a complete walkthrough of every setting.
 
 ## Verify It's Working
 
@@ -198,6 +160,8 @@ For LAN-only deployments with self-signed certificates, see the [Configuration w
 
 ## What's Next?
 
+- [Firmware Configuration](/getting-started/firmware-configuration) — understand every setting
+- [Managing Your Sensor](/getting-started/managing-your-sensor) — MQTT commands, calibration, remote diagnostics
 - [Firmware Updates](/getting-started/firmware-update) — keeping your sensor up to date
+- [Board Configurations](/hardware/board-configurations) — detailed per-board wiring diagrams and quirks
 - [Recommended Sensors](/getting-started/recommended-sensors) — detailed sensor specifications and datasheets
-- [Sensor Specifications](/hardware/sensor-specs) — technical reference (I2C addresses, priorities, calibration periods)
