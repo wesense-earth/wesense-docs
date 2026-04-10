@@ -8,14 +8,20 @@ A WeSense node is an ESP32-based environmental sensor that reports readings ever
 
 Any of these supported boards will work. The firmware auto-detects your board type at startup.
 
-| Board | LoRa | Best For | Approx Cost |
-|-------|------|----------|-------------|
-| **ESP32 DevKit / WROOM-32** | No | Simplest build, WiFi only | ~$5-10 |
-| **ESP32-C3 Generic** | No | Compact, budget-friendly | ~$4-8 |
-| **ESP32-C6 Beetle / Generic** | No | WiFi 6, compact | ~$6-10 |
-| **ESP32-S3 Generic** | No | More processing power | ~$8-15 |
-| **T-Beam v1.x (Lilygo)** | Yes (SX1276) | LoRaWAN + GPS | ~$30-50 |
-| **T-Beam T3 S3 v1.2 (Lilygo)** | Yes (SX1262) | LoRaWAN + GPS + solar/battery | ~$35-55 |
+| Board | LoRa | Best For | Where to Buy | Approx Cost |
+|-------|------|----------|-------------|-------------|
+| **ESP32 DevKit / WROOM-32** | No | Simplest build, WiFi only | AliExpress, Amazon | ~$5-10 |
+| **ESP32-C3 Generic** | No | Compact, budget-friendly | AliExpress, Amazon | ~$4-8 |
+| **ESP32-C6 Beetle / Generic** | No | WiFi 6, compact | AliExpress, Amazon | ~$6-10 |
+| **ESP32-S3 Generic** | No | More processing power | AliExpress, Amazon | ~$8-15 |
+| **[T-Beam v1.x](https://www.lilygo.cc/products/t-beam-v1-1-esp32-lora-module) (Lilygo)** | Yes (SX1276) | LoRaWAN + GPS + battery/solar | [Lilygo](https://www.lilygo.cc) | ~$30-50 |
+| **[T-Beam T3 S3 v1.2](https://www.lilygo.cc/products/t-beam-s3-core) (Lilygo)** | Yes (SX1262) | LoRaWAN + GPS + battery/solar | [Lilygo](https://www.lilygo.cc) | ~$35-55 |
+
+::: info About the T-Beam LoRa boards
+Both T-Beam models include built-in battery holders (18650), solar charge controllers, and GPS. The T-Beam T3 S3 also has an external battery connector. Either board can run fully off-grid with a small solar panel.
+
+The SX1262 radio in the T3 S3 is the newer generation — despite the lower model number, it has better range and lower power consumption than the SX1276 in the v1.x. If buying new, the T3 S3 is the better choice.
+:::
 
 ### 2. Sensors
 
@@ -41,7 +47,7 @@ For flashing the firmware. Most ESP32 boards use USB-C or Micro-USB.
 
 ### I2C Sensors (most sensors)
 
-Most sensors use I2C — four wires, same for every sensor:
+Most sensors use I2C — four wires, same for every sensor. Where possible, choose I2C versions of sensors as they're simpler to wire and you can connect many on the same bus.
 
 ```
 ESP32 Board    →    Sensor
@@ -52,7 +58,7 @@ SCL            →    SCL
 GND            →    GND
 ```
 
-Multiple I2C sensors share the same bus — just connect them all to the same SDA/SCL pins. The firmware detects which sensors are present automatically.
+Multiple I2C sensors share the same bus — daisy chain them all to the same SDA/SCL pins. The firmware detects which sensors are present automatically.
 
 **I2C pin assignments by board:**
 
@@ -65,9 +71,11 @@ Multiple I2C sensors share the same bus — just connect them all to the same SD
 | ESP32-C3 Generic | GPIO 4 | GPIO 5 |
 | ESP32-C6 Beetle / Generic | GPIO 19 | GPIO 20 |
 
+For detailed per-board wiring diagrams, pin layouts, and board-specific quirks, see [Board Configurations](/hardware/board-configurations).
+
 ### UART Sensors (PMS5003, C8 CO2)
 
-UART sensors need four wires but connect to different pins. Only one UART sensor can be connected at a time — the firmware auto-detects which is present.
+UART sensors connect to the board's UART port. The number of UART sensors you can connect is limited by the number of available UART ports on your board — typically one port for sensors (the other is used for USB/debug). The firmware auto-detects which sensor is present.
 
 ```
 ESP32 Board    →    UART Sensor
@@ -90,7 +98,7 @@ GND            →    GND
 | ESP32-C6 Beetle / Generic | GPIO 17 | GPIO 16 | UART1 |
 
 ::: warning UART sensors need 5V
-PMS5003 and C8 CO2 sensors require 5V power. Connect VCC to the board's VIN or 5V pin, not 3.3V.
+PMS5003 and C8 CO2 sensors require 5V power. Connect VCC to the board's VIN or 5V pin, not 3.3V. Note that not all board designs break out a 5V pin — check your specific board's pinout before buying. Whether a board has a 5V output depends on the board manufacturer's design, not the ESP32 chip variant.
 :::
 
 ## Flash the Firmware
@@ -105,16 +113,20 @@ The short version:
 4. Edit your configuration (see below)
 5. Click **Upload**
 
+A web-based flasher with pre-built binaries (no Arduino IDE required) is on the [roadmap](/getting-started/quick-start) — the challenge is handling device-specific configuration without a compile step.
+
 ## Configure
 
-At minimum, you need to set your WiFi credentials in `credentials.h`:
+At minimum, you need to set two things:
+
+**In `credentials.h`** — your WiFi credentials:
 
 ```cpp
 #define WIFI_SSID "YourWiFiNetwork"
 #define WIFI_PASSWORD "YourWiFiPassword"
 ```
 
-And optionally set your location in `wesense-sensor-firmware.ino`:
+**In `wesense-sensor-firmware.ino`** — your location:
 
 ```cpp
 const bool INCLUDE_LOCATION_IN_MQTT = true;
@@ -122,9 +134,13 @@ const float FIXED_LATITUDE = -36.8485;
 const float FIXED_LONGITUDE = 174.7633;
 ```
 
+Location is required — without it, the network can't determine which region your data belongs to and the data won't be ingested. You don't need to provide your exact address; neighbourhood-level accuracy is sufficient. You can enter coordinates slightly offset from your actual position if you prefer.
+
+T-Beam boards with GPS determine location automatically.
+
 Everything else has sensible defaults — the firmware connects to `mqtt.wesense.earth` with TLS encryption automatically.
 
-See [Firmware Configuration](/getting-started/firmware-configuration) for a complete walkthrough of every setting.
+See [Firmware Configuration](/getting-started/firmware-configuration) for a complete walkthrough of every setting in both files.
 
 ## Verify It's Working
 

@@ -47,15 +47,15 @@ Enables remote serial monitor access over your network. Set `ALLOWED_TELNET_IP` 
 ### Location
 
 ```cpp
-const bool INCLUDE_LOCATION_IN_MQTT = false;
+const bool INCLUDE_LOCATION_IN_MQTT = true;
 const float FIXED_LATITUDE = -36.8485;
 const float FIXED_LONGITUDE = 174.7633;
 ```
 
 | Setting | Meaning |
 |---------|---------|
-| `INCLUDE_LOCATION_IN_MQTT` | Set `true` to include coordinates in your sensor data. Without this, your data is stored but won't appear on the map. |
-| `FIXED_LATITUDE` / `FIXED_LONGITUDE` | Your approximate location. You can offset these for privacy — neighbourhood-level accuracy is sufficient for the map. T-Beam boards with GPS determine location automatically and ignore these values. |
+| `INCLUDE_LOCATION_IN_MQTT` | Must be `true` for the network to ingest your data. Without location, the system can't determine which region your readings belong to. |
+| `FIXED_LATITUDE` / `FIXED_LONGITUDE` | Your location. Neighbourhood-level accuracy is sufficient — you can enter coordinates slightly offset from your actual position if you prefer. T-Beam boards with GPS determine location automatically and ignore these values. |
 
 ### Time Zone
 
