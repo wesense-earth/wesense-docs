@@ -205,8 +205,6 @@ Photoacoustic CO2 sensor. Smaller form factor than SCD30, slightly less stable l
 
 > **Warning:** Not recommended. ABC requires regular exposure to fresh air (~400ppm CO2) to maintain accuracy. Not suitable for 24/7 indoor spaces.
 
-[Datasheet (PDF)](/datasheets/CM1106-C.pdf)
-
 ---
 
 ### Pressure Sensors
