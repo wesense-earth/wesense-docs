@@ -13,7 +13,7 @@ export default defineConfig({
     siteTitle: 'WeSense',
 
     nav: [
-      { text: 'Get Started', link: '/getting-started/recommended-sensors' },
+      { text: 'Get Started', link: '/getting-started/quick-start' },
       { text: 'Run a Station', link: '/station-operators/operate-a-station' },
       { text: 'Develop', link: '/developers/architecture' },
       { text: 'Live Map', link: 'https://map.wesense.earth/#map&zoom=3' },
@@ -25,6 +25,7 @@ export default defineConfig({
         text: 'Getting Started',
         collapsed: false,
         items: [
+          { text: 'Quick Start', link: '/getting-started/quick-start' },
           { text: 'Recommended Sensors', link: '/getting-started/recommended-sensors' },
           { text: 'Build a WeSense Node', link: '/getting-started/build-wesense-node' },
           { text: 'Meshtastic Node', link: '/getting-started/meshtastic-node' },

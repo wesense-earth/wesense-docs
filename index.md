@@ -7,8 +7,8 @@ hero:
   tagline: Guides for contributors, operators, and developers of the WeSense environmental sensor network.
   actions:
     - theme: brand
-      text: Contribute Sensor Data
-      link: /getting-started/recommended-sensors
+      text: Quick Start
+      link: /getting-started/quick-start
     - theme: alt
       text: Run a Station
       link: /station-operators/operate-a-station
@@ -19,8 +19,8 @@ hero:
 features:
   - title: Contribute Sensor Data
     details: The most valuable thing you can do. Place a sensor somewhere and contribute environmental data — no coding required.
-    link: /getting-started/recommended-sensors
-    linkText: Get started
+    link: /getting-started/quick-start
+    linkText: Quick start
   - title: Run a Station
     details: Help keep data safe by running a WeSense station on a Raspberry Pi or home server. Your station replicates and serves data via P2P.
     link: /station-operators/operate-a-station
