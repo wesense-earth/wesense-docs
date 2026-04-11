@@ -88,7 +88,7 @@ The ingester extracts environmental metrics from Meshtastic telemetry messages:
 These are published as standard WeSense readings alongside data from all other sources — same geocoding, same deduplication, same ClickHouse schema, same live map.
 
 ::: info It may take time for your node to appear
-Your node won't show up on the WeSense map until the ingester has received both a position message and a telemetry message from your device. Depending on your update intervals and mesh conditions, this can take anywhere from a few minutes to an hour after first powering on.
+Your node won't show up on the WeSense map until the ingester has received both a position message and a telemetry message from your device. How long this takes depends entirely on your update intervals — if your position and telemetry intervals are set to the recommended values above, expect a few minutes to an hour. If they're set to the defaults (which can be days), it could take that long.
 :::
 
 ## Deduplication
