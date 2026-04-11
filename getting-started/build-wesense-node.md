@@ -1,6 +1,6 @@
-# Build a WeSense Node
+# Hardware Setup
 
-A WeSense node is an ESP32-based environmental sensor that reports readings every 5 minutes over WiFi or LoRaWAN. No cloud account needed — your data goes directly to the WeSense network.
+A WeSense node is an ESP32-based environmental sensor that reports readings every 5 minutes over WiFi or LoRaWAN. No cloud account needed — your data goes directly to the WeSense network. This page covers choosing your board, sensors, and wiring everything together.
 
 ## What You Need
 

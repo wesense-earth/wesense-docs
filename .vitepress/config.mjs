@@ -35,14 +35,32 @@ export default defineConfig({
         items: [
           { text: 'Quick Start', link: '/getting-started/quick-start' },
           { text: 'Recommended Sensors', link: '/getting-started/recommended-sensors' },
-          { text: 'Build a WeSense Node', link: '/getting-started/build-wesense-node' },
+        ],
+      },
+      {
+        text: 'Build a WeSense Node',
+        collapsed: false,
+        items: [
+          { text: 'Hardware Setup', link: '/getting-started/build-wesense-node' },
           { text: 'Firmware Setup', link: '/getting-started/firmware-setup' },
           { text: 'Firmware Configuration', link: '/getting-started/firmware-configuration' },
           { text: 'Managing Your Sensor', link: '/getting-started/managing-your-sensor' },
+          { text: 'Firmware Updates', link: '/getting-started/firmware-update' },
+        ],
+      },
+      {
+        text: 'Build a Meshtastic Node',
+        collapsed: true,
+        items: [
           { text: 'Meshtastic Node', link: '/getting-started/meshtastic-node' },
           { text: 'Meshtastic Gateway', link: '/getting-started/meshtastic-gateway' },
+        ],
+      },
+      {
+        text: 'Other Data Sources',
+        collapsed: true,
+        items: [
           { text: 'Home Assistant / Ecowitt', link: '/getting-started/home-assistant' },
-          { text: 'Firmware Updates', link: '/getting-started/firmware-update' },
         ],
       },
       {
