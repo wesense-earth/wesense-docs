@@ -5,11 +5,11 @@ export default defineConfig({
   description: 'Guides for contributors, operators, and developers of the WeSense environmental sensor network',
 
   head: [
-    ['link', { rel: 'icon', type: 'image/png', href: '/logos/logo-solid-light.png' }],
+    ['link', { rel: 'icon', type: 'image/png', href: '/logos/logo-solid-dark-cropped.png' }],
   ],
 
   themeConfig: {
-    logo: '/logos/logo-solid-light.png',
+    logo: '/logos/logo-solid-dark-cropped.png',
     siteTitle: 'WeSense',
 
     nav: [
