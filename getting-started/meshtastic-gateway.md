@@ -87,6 +87,12 @@ The WeSense Meshtastic ingester has two modes:
 
 **Downlink mode** is for hub operators who want to ingest global Meshtastic data without running their own gateway. It uses the public Meshtastic MQTT credentials (`meshdev` / `large4cats`) and subscribes to regional topics like `msh/ANZ/#`, `msh/US/#`, `msh/EU_868/#`.
 
+::: warning Downlink mode — use with caution
+Downlink mode subscribes to the global public Meshtastic MQTT feed, which generates very high traffic volumes and significant deduplication overhead. Most operators should **not** enable this. Use community mode with a local gateway instead.
+
+As the WeSense network grows, we plan to evolve downlink so that country nodes can subscribe to just their own country's feed — taking on responsibility for their region's Meshtastic data rather than every node pulling the entire world. This is a developing area.
+:::
+
 ::: warning Public MQTT instability
 The public Meshtastic MQTT servers (`mqtt.meshtastic.org`) can experience instability and downtime. Running your own gateway with community mode is more reliable and gives you control over your data path.
 :::
