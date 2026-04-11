@@ -27,9 +27,11 @@ Meshtastic supports sensors like BME280, BME680, SHT4x, and others. See the [Mes
 
 Your Meshtastic node's telemetry reaches WeSense via MQTT. There are two paths:
 
-### Option 1: Via a Local Gateway (recommended)
+### Option 1: Via a Local WeSense Meshtastic Gateway (recommended)
 
-If someone in your mesh neighbourhood is running a [Meshtastic Gateway](/getting-started/meshtastic-gateway), your data automatically flows through their gateway to WeSense. You don't need to configure anything on your node beyond enabling environmental telemetry.
+If someone in your mesh neighbourhood is running a [WeSense Meshtastic Gateway](/getting-started/meshtastic-gateway), your data automatically flows through their gateway into the WeSense network. You don't need to configure anything on your node beyond enabling environmental telemetry — and your node doesn't need internet access. Only the gateway needs an internet connection.
+
+No one running a gateway near you? You can [build one yourself](/getting-started/meshtastic-gateway) — it's a standard Meshtastic node with WiFi and a WeSense station.
 
 This is the encouraged approach — it reduces dependency on the public Meshtastic MQTT servers and gives your community more control over the data path.
 
