@@ -1,6 +1,6 @@
 # Features
 
-WeSense is a full-stack environmental monitoring system — from sensor firmware to data archiving. Here's what's in the box.
+WeSense is a full-stack environmental monitoring system — from sensor firmware to community-operated infrastructure to open data archiving. Here's what's in the box.
 
 ## Sensor Firmware
 
@@ -52,39 +52,46 @@ See [Recommended Sensors](/getting-started/recommended-sensors) for our picks an
 
 ---
 
-## Data Platform
+## Run a Node
 
-### Ingestion
-- **Multiple data sources** — WeSense sensors, Meshtastic mesh networks, Home Assistant, government air quality stations, with more coming
-- **Shared ingester core** — all data sources go through the same geocoding, deduplication, and storage pipeline
-- **ISO 3166 geocoding** — every reading is tagged with country and subdivision codes from coordinates
+The WeSense network is community-operated. Sensors collect the data, but nodes are the infrastructure that stores, replicates, and serves it. Running a node is one of the most impactful ways to contribute.
 
-### Storage & Access
-- **ClickHouse** time-series database — fast queries over billions of readings
-- **Parquet archiving** — daily archives exported in open Parquet format, readable by ClickHouse, Pandas, DuckDB, Apache Spark, and most data science tools
-- **Free and open data** — all sensor data is accessible to anyone, forever
+### What a Node Does
 
-### P2P Network
+A node runs as a set of Docker containers on a Raspberry Pi, home server, or NAS. Depending on your [deployment profile](/station-operators/deployment-profiles), it can include:
 
-The WeSense network distributes data across community-operated stations via peer-to-peer, so no single point of failure can lose the data. Stations choose what to store based on their available resources:
+- **Data ingesters** — decode sensor data from MQTT, Meshtastic, Home Assistant, government APIs, and other sources
+- **ClickHouse database** — store and query time-series sensor data locally
+- **MQTT broker (EMQX)** — receive sensor data directly from devices in your area
+- **Respiro dashboard** — visualise sensor data on a map and monitor your environment
+- **P2P archive replication** — store and serve Parquet archives for your chosen regions
+
+### Storage Scopes
+
+Every node chooses what data to store and replicate. The network needs nodes at every level:
 
 | Storage Scope | What Gets Stored | Who It's For |
 |--------------|-----------------|-------------|
 | `nz/wgn` | Just Wellington | A sensor operator backing up their local area |
-| `nz/*` | All of New Zealand | A regional guardian covering their country |
+| `nz/*` | All of New Zealand | A country node |
 | `nz/*,au/*` | New Zealand and Australia | A regional node serving Oceania |
 | `*/*` | Everything on the network | A world node — the ultimate backup |
 
-The more nodes that store a region's data, the more copies exist, and the more resilient that data becomes. Serving is automatic — everything in your store is available for any peer to pull.
+The more nodes that store a region's data, the more copies exist, and the more resilient that data becomes. Serving is automatic — everything in your store is available for any peer to pull. The network self-heals as nodes join and leave.
 
-**Key technologies:**
-- **Iroh archive replication** — Parquet archives distributed across stations via P2P with zero central dependency
-- **Zenoh live distribution** — real-time sensor data streamed between stations via P2P
-- **Community-driven replication** — operators choose their storage scope, and the network self-heals as nodes join and leave
+### Node Types
 
-### Visualisation
+| Type | What It Runs | Best For |
+|------|-------------|----------|
+| **Contributor** | Ingesters only | Sensor operators forwarding data to a remote hub |
+| **Guardian** | Full stack (MQTT, ClickHouse, Ingesters, Respiro, P2P) | The backbone of the network — stores, serves, and replicates data |
+| **Hub** | MQTT broker only | A public MQTT entry point for sensors in your area |
 
-WeSense includes [Respiro](https://map.wesense.earth), a built-in dashboard that serves multiple roles:
+See [Operate a Station](/station-operators/operate-a-station) to get started.
+
+### Visualisation — Respiro
+
+Every node running the Guardian profile includes [Respiro](https://map.wesense.earth), a built-in dashboard that serves multiple roles:
 
 - **Global sensor map** — see every sensor on the network, zoom from world view to street level
 - **Telemetry viewer** — drill into individual sensor readings over time
@@ -92,7 +99,30 @@ WeSense includes [Respiro](https://map.wesense.earth), a built-in dashboard that
 - **Status dashboard** — network health, sensor uptime, data coverage
 - **Choropleth overlays** — regional heatmaps showing environmental conditions by area
 
-Respiro is a starting point, not the end goal. All WeSense data is open and queryable, so anyone can build their own visualisations on top of it. Whether you want to build a specialised air quality dashboard, integrate WeSense data into an existing platform, or create something entirely new — the data is there. We're keen to link to and promote third-party tools that use WeSense data as a base.
+### Build Your Own Visualisation
+
+Respiro is a starting point, not the end goal. All WeSense data is open and queryable via ClickHouse, MQTT subscriptions, and Parquet archives — so anyone can build their own tools on top of it. Whether you want to build a specialised air quality dashboard, integrate WeSense data into an existing platform, or create something entirely new — the data is there. We're keen to link to and promote third-party visualisations that use WeSense data as a base.
+
+---
+
+## Open Data Platform
+
+Everything above is built on an open data platform designed so that no single entity controls the data.
+
+### Ingestion
+- **Multiple data sources** — WeSense sensors, Meshtastic mesh networks, Home Assistant, government air quality stations, with more coming via community-built [ingesters](/developers/ingesters)
+- **Shared ingester core** — all data sources go through the same geocoding, deduplication, and storage pipeline
+- **ISO 3166 geocoding** — every reading is tagged with country and subdivision codes from coordinates
+
+### Storage
+- **ClickHouse** time-series database — fast queries over billions of readings
+- **Parquet archiving** — daily archives exported in open Parquet format, readable by ClickHouse, Pandas, DuckDB, Apache Spark, and most data science and climate science tools
+- **Free and open data** — all sensor data is accessible to anyone, forever
+
+### P2P Replication
+- **Iroh archive replication** — Parquet archives distributed across nodes via P2P with zero central dependency
+- **Zenoh live distribution** — real-time sensor data streamed between nodes via P2P
+- **Community-driven** — operators choose their storage scope, and the network self-heals as nodes join and leave
 
 ---
 
