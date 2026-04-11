@@ -49,10 +49,10 @@ export default defineConfig({
         ],
       },
       {
-        text: 'Build a Meshtastic Node',
+        text: 'Add a Meshtastic Node',
         collapsed: true,
         items: [
-          { text: 'Meshtastic Node', link: '/getting-started/meshtastic-node' },
+          { text: 'Overview & MQTT Setup', link: '/getting-started/meshtastic-node' },
         ],
       },
       {
