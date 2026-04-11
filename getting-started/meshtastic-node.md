@@ -18,10 +18,20 @@ In the Meshtastic app or web interface:
 
 1. Go to **Module Configuration → Telemetry**
 2. Enable **Environment Metrics**
-3. Set the **Update Interval** (e.g. 300 seconds / 5 minutes)
+3. Set the **Environment Update Interval** to **1800 seconds** (30 minutes) — this is the most frequent setting available. The software allows up to 7 days, but anything longer than 30 minutes is not useful for environmental monitoring.
 4. Ensure your sensors are wired and detected (check the device info screen)
 
 Meshtastic supports sensors like BME280, BME680, SHT4x, and others. See the [Meshtastic Telemetry docs](https://meshtastic.org/docs/configuration/module/telemetry/) for the full list of supported sensors and wiring guides.
+
+### Position Update Interval
+
+For your sensor data to appear on the WeSense map, a position (GPS or fixed) must be associated with your node. Meshtastic sends position and environmental telemetry as separate messages, and the WeSense ingester caches and correlates them.
+
+::: tip Speed up initial detection
+When first setting up your node, set the **Position Broadcast Interval** to a short value (e.g. 120 seconds). Once your node appears on the WeSense map, you can increase this to a longer interval (e.g. 3600 seconds / 1 hour) — the ingester caches your last known position and will continue to use it for incoming telemetry readings. You don't need frequent position updates once the initial location is cached.
+
+If using a fixed position (no GPS), set it in **Module Configuration → Position → Fixed Position** and it will be sent with each position broadcast.
+:::
 
 ## MQTT Configuration
 
@@ -59,7 +69,12 @@ WeSense Meshtastic Ingester
 ClickHouse + Live Map
 ```
 
-Meshtastic sends position and environmental telemetry as separate messages (often minutes apart). The WeSense ingester caches positions per node and correlates them with incoming telemetry, so your sensor readings get tagged with the correct location.
+Meshtastic sends position, environmental telemetry, and device info as separate messages — often minutes apart. The WeSense ingester caches these per node and correlates them, so your sensor readings get tagged with the correct location and device name even though they arrive at different times.
+
+The ingester caches:
+- **Position** — latitude, longitude, altitude (from GPS or fixed position)
+- **Environmental telemetry** — sensor readings (temperature, humidity, pressure, battery)
+- **Device info** — the friendly name you set for your node
 
 ### What Gets Ingested
 
@@ -71,6 +86,10 @@ The ingester extracts environmental metrics from Meshtastic telemetry messages:
 - Battery voltage (device health)
 
 These are published as standard WeSense readings alongside data from all other sources — same geocoding, same deduplication, same ClickHouse schema, same live map.
+
+::: info It may take time for your node to appear
+Your node won't show up on the WeSense map until the ingester has received both a position message and a telemetry message from your device. Depending on your update intervals and mesh conditions, this can take anywhere from a few minutes to an hour after first powering on.
+:::
 
 ## Deduplication
 
