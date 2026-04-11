@@ -53,11 +53,10 @@ export default defineConfig({
         collapsed: true,
         items: [
           { text: 'Meshtastic Node', link: '/getting-started/meshtastic-node' },
-          { text: 'Meshtastic Gateway', link: '/getting-started/meshtastic-gateway' },
         ],
       },
       {
-        text: 'Other Data Sources',
+        text: 'Contribute Home Assistant Data',
         collapsed: true,
         items: [
           { text: 'Home Assistant / Ecowitt', link: '/getting-started/home-assistant' },
@@ -70,6 +69,7 @@ export default defineConfig({
           { text: 'Operate a Station', link: '/station-operators/operate-a-station' },
           { text: 'Deployment Profiles', link: '/station-operators/deployment-profiles' },
           { text: 'Contribution Tiers', link: '/station-operators/contribution-tiers' },
+          { text: 'Meshtastic Gateway', link: '/getting-started/meshtastic-gateway' },
         ],
       },
       {
