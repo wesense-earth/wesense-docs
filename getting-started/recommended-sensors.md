@@ -107,9 +107,13 @@ These sensors are supported by the firmware and we will log data from them if pr
 
 ## Detailed Sensor Information
 
+<!-- IMAGE: /images/sensors/sensor-lineup.jpg — Photo of recommended sensor breakout boards (SHT45, SCD30, SPS30, MS5611, etc.) -->
+
 ### Temperature and Humidity
 
 #### SHT45 (Sensirion) — Recommended
+
+<!-- IMAGE: /images/sensors/sht45-breakout.jpg — Photo of SHT45 breakout board -->
 The best integrated temperature and humidity sensor. Zero maintenance, factory calibrated for life.
 
 | Specification | Value |

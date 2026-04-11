@@ -2,6 +2,8 @@
 
 WeSense is a full-stack environmental monitoring system — from sensor firmware to community-operated infrastructure to open data archiving. Here's what's in the box.
 
+<!-- IMAGE: /images/screenshots/respiro-map-overview.png — Screenshot of Respiro map showing sensors across a region -->
+
 ## Sensor Firmware
 
 The WeSense firmware runs on ESP32 boards and handles everything from sensor reading to data transmission.
@@ -79,6 +81,8 @@ Every node chooses what data to store and replicate. The network needs nodes at 
 
 The more nodes that store a region's data, the more copies exist, and the more resilient that data becomes. Serving is automatic — everything in your store is available for any peer to pull. The network self-heals as nodes join and leave.
 
+<!-- IMAGE: /images/diagrams/storage-scope-map.svg — World map with coloured regions showing what different storage scopes cover -->
+
 ### Node Types
 
 | Type | What It Runs | Best For |
@@ -92,6 +96,9 @@ See [Operate a Station](/station-operators/operate-a-station) to get started.
 ### Visualisation — Respiro
 
 Every node running the Guardian profile includes [Respiro](https://map.wesense.earth), a built-in dashboard that serves multiple roles:
+
+<!-- IMAGE: /images/screenshots/respiro-telemetry.png — Screenshot of Respiro telemetry viewer showing sensor readings over time -->
+<!-- IMAGE: /images/screenshots/respiro-choropleth.png — Screenshot of choropleth overlay showing regional heatmap -->
 
 - **Global sensor map** — see every sensor on the network, zoom from world view to street level
 - **Telemetry viewer** — drill into individual sensor readings over time

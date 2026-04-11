@@ -2,7 +2,9 @@
 
 A Meshtastic gateway bridges your local mesh network to the internet. Environmental telemetry from nearby Meshtastic nodes flows through your gateway into WeSense automatically — and optionally to the public Meshtastic network and third-party maps as well.
 
-Running a gateway is one of the most valuable infrastructure contributions you can make. It gives your local mesh neighbourhood a reliable, community-controlled path to the WeSense network without depending on the public Meshtastic MQTT servers.
+Running a gateway is one of the most valuable infrastructure contributions you can make.
+
+<!-- IMAGE: /images/stations/meshtastic-gateway-setup.jpg — Photo of a Meshtastic gateway node next to a Pi/server --> It gives your local mesh neighbourhood a reliable, community-controlled path to the WeSense network without depending on the public Meshtastic MQTT servers.
 
 ## What You Need
 

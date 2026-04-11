@@ -2,6 +2,9 @@
 
 Running a WeSense station is one of the most impactful contributions you can make. Your station stores sensor data, archives it in open Parquet format, and replicates archives across the P2P network — making the data resilient and permanent.
 
+<!-- IMAGE: /images/stations/station-setup.jpg — Photo of a running WeSense station (Pi/server with SSD) -->
+<!-- IMAGE: /images/diagrams/station-architecture.svg — Box diagram showing Docker services: EMQX → Ingesters → ClickHouse → Respiro, with Iroh/Zenoh/OrbitDB -->
+
 ::: info Pre-alpha Software
 WeSense is under heavy development. Running a station currently requires comfort with Docker, command-line tools, and troubleshooting. We're working on making this easier.
 :::

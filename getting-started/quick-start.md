@@ -2,6 +2,8 @@
 
 There are several ways to contribute sensor data to WeSense. The right path depends on what you already have.
 
+<!-- IMAGE: /images/diagrams/quick-start-flowchart.svg — Decision flowchart: "Do you have existing sensors?" → Yes → MQTT/HA. No → "Do you have WiFi at the sensor location?" → Yes → Build a WeSense Node. No → "LoRaWAN gateway in range?" → Yes → LoRaWAN. No → Meshtastic -->
+
 ## I already have sensors
 
 If you already have environmental sensors (Ecowitt weather stations, Home Assistant devices, or anything that publishes MQTT), you can start contributing data immediately.

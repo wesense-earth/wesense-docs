@@ -4,6 +4,8 @@
 
 WeSense doesn't replace Meshtastic or require special firmware. You run standard Meshtastic firmware with environmental sensors enabled, and WeSense picks up the telemetry data via MQTT.
 
+<!-- IMAGE: /images/boards/meshtastic-node-with-sensor.jpg — Photo of a Meshtastic board (e.g. Heltec V3 or T-Beam) with a BME280 sensor attached -->
+
 ## What You Need
 
 - A **Meshtastic-compatible board** with LoRa radio (e.g. Heltec V3, LilyGo T-Beam, RAK WisBlock)

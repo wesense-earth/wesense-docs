@@ -8,6 +8,8 @@ A WeSense node is an ESP32-based environmental sensor that reports readings ever
 
 Any of these supported boards will work. The firmware auto-detects your board type at startup.
 
+<!-- IMAGE: /images/boards/board-lineup.jpg — Photo of supported boards side by side for scale comparison -->
+
 | Board | LoRa | Best For | Where to Buy | Approx Cost |
 |-------|------|----------|-------------|-------------|
 | **ESP32 DevKit / WROOM-32** | No | Simplest build, WiFi only | AliExpress, Amazon | ~$5-10 |
@@ -62,6 +64,8 @@ GND            →    GND
 
 Multiple I2C sensors share the same bus — daisy chain them all to the same SDA/SCL pins. The firmware detects which sensors are present automatically.
 
+<!-- IMAGE: /images/diagrams/i2c-daisy-chain.svg — Diagram showing multiple I2C sensors daisy-chained to the same SDA/SCL pins on an ESP32 -->
+
 **I2C pin assignments by board:**
 
 | Board | SDA | SCL |
@@ -72,6 +76,8 @@ Multiple I2C sensors share the same bus — daisy chain them all to the same SDA
 | ESP32-S3 Generic | GPIO 8 | GPIO 9 |
 | ESP32-C3 Generic | GPIO 4 | GPIO 5 |
 | ESP32-C6 Beetle / Generic | GPIO 19 | GPIO 20 |
+
+<!-- IMAGE: /images/boards/esp32-devkit-wiring.jpg — Photo of an ESP32 DevKit with SHT45 and SCD30 wired up -->
 
 For detailed per-board wiring diagrams, pin layouts, and board-specific quirks, see [Board Configurations](/hardware/board-configurations).
 
