@@ -1,20 +1,154 @@
-/* WeSense brand colours */
+/* ============================================
+   WeSense Brand Theme
+   Matches wesense.earth colour palette
+   ============================================ */
+
+/* Fonts — match the website */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400&display=swap');
+
 :root {
+  /* Brand colours */
   --vp-c-brand-1: #2D6A4F;
   --vp-c-brand-2: #40916C;
   --vp-c-brand-3: #52B788;
   --vp-c-brand-soft: rgba(82, 183, 136, 0.14);
+
+  /* Backgrounds — warm off-whites like the website */
+  --vp-c-bg: #FAFAF5;
+  --vp-c-bg-alt: #E8F5EE;
+  --vp-c-bg-elv: #E8E4DD;
+  --vp-c-bg-soft: #E8F5EE;
+
+  /* Navbar & sidebar */
+  --vp-nav-bg-color: #FAFAF5;
+  --vp-sidebar-bg-color: #FAFAF5;
+
+  /* Text */
+  --vp-c-text-1: #1A1A18;
+  --vp-c-text-2: #5C5C52;
+  --vp-c-text-3: #8D8478;
+
+  /* Borders */
+  --vp-c-border: #C7C1B7;
+  --vp-c-divider: #C7C1B7;
+  --vp-c-gutter: #E8E4DD;
+
+  /* Code blocks */
+  --vp-code-block-bg: #E8E4DD;
+  --vp-code-bg: rgba(45, 106, 79, 0.08);
+
+  /* Cards & tips */
+  --vp-c-tip-1: #2D6A4F;
+  --vp-c-tip-2: rgba(45, 106, 79, 0.14);
+  --vp-c-tip-3: rgba(45, 106, 79, 0.08);
+
+  /* Hero */
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(135deg, #2D6A4F, #52B788);
 }
 
 .dark {
+  /* Brand colours — lighter for dark mode */
   --vp-c-brand-1: #52B788;
   --vp-c-brand-2: #40916C;
   --vp-c-brand-3: #2D6A4F;
   --vp-c-brand-soft: rgba(82, 183, 136, 0.16);
+
+  /* Backgrounds — dark warm tones like the website */
+  --vp-c-bg: #1A1A18;
+  --vp-c-bg-alt: #3D3D38;
+  --vp-c-bg-elv: #3D3D38;
+  --vp-c-bg-soft: #2A2A26;
+
+  /* Navbar & sidebar */
+  --vp-nav-bg-color: #1A1A18;
+  --vp-sidebar-bg-color: #1A1A18;
+
+  /* Text */
+  --vp-c-text-1: #E8E4DD;
+  --vp-c-text-2: #C7C1B7;
+  --vp-c-text-3: #8D8478;
+
+  /* Borders */
+  --vp-c-border: #3D3D38;
+  --vp-c-divider: #3D3D38;
+  --vp-c-gutter: #2A2A26;
+
+  /* Code blocks */
+  --vp-code-block-bg: #2A2A26;
+  --vp-code-bg: rgba(82, 183, 136, 0.1);
+
+  /* Cards & tips */
+  --vp-c-tip-1: #52B788;
+  --vp-c-tip-2: rgba(82, 183, 136, 0.16);
+  --vp-c-tip-3: rgba(82, 183, 136, 0.08);
+
+  /* Hero */
+  --vp-home-hero-name-background: linear-gradient(135deg, #52B788, #B7E4C7);
 }
 
-/* Hero gradient */
+/* ============================================
+   Typography — match website fonts
+   ============================================ */
+
 :root {
-  --vp-home-hero-name-color: transparent;
-  --vp-home-hero-name-background: linear-gradient(135deg, #2D6A4F, #52B788);
+  --vp-font-family-base: 'Inter', system-ui, -apple-system, sans-serif;
+  --vp-font-family-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3 {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* ============================================
+   Navbar styling
+   ============================================ */
+
+.VPNav {
+  border-bottom: 1px solid var(--vp-c-border) !important;
+}
+
+/* ============================================
+   Sidebar — softer active state
+   ============================================ */
+
+.VPSidebar .is-active > .link > .text {
+  color: var(--vp-c-brand-1) !important;
+}
+
+/* ============================================
+   Home page feature cards — match website cards
+   ============================================ */
+
+.VPFeature {
+  border: 1px solid var(--vp-c-border) !important;
+  background-color: var(--vp-c-bg-elv) !important;
+  transition: border-color 0.2s ease;
+}
+
+.VPFeature:hover {
+  border-color: var(--vp-c-brand-1) !important;
+}
+
+/* ============================================
+   Content — warmer link underlines
+   ============================================ */
+
+.vp-doc a {
+  text-decoration-color: rgba(45, 106, 79, 0.3);
+}
+
+.dark .vp-doc a {
+  text-decoration-color: rgba(82, 183, 136, 0.3);
+}
+
+/* ============================================
+   Footer
+   ============================================ */
+
+.VPFooter {
+  border-top: 1px solid var(--vp-c-border) !important;
 }

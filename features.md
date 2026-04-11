@@ -17,6 +17,7 @@ The WeSense firmware runs on ESP32 boards and handles everything from sensor rea
 - **WiFi** with MQTTS (TLS-encrypted MQTT) — data is encrypted in transit by default
 - **LoRaWAN** via The Things Network — for locations without WiFi. Default WeSense TTN credentials are built in.
 - **GPS support** — T-Beam boards auto-detect location. Other boards use configurable fixed coordinates.
+- **Home Assistant auto-discovery** — sensors automatically appear in any Home Assistant instance on your local network via MQTT discovery. Your environmental data feeds both WeSense and your home automation simultaneously, with no manual configuration.
 - **NTP time synchronisation** — accurate timestamps on every reading, with daylight saving support
 
 ### Remote Management
