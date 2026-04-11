@@ -83,8 +83,16 @@ The more nodes that store a region's data, the more copies exist, and the more r
 - **Community-driven replication** — operators choose their storage scope, and the network self-heals as nodes join and leave
 
 ### Visualisation
-- **Live sensor map** ([map.wesense.earth](https://map.wesense.earth)) — see sensor data in real time
+
+WeSense includes [Respiro](https://map.wesense.earth), a built-in dashboard that serves multiple roles:
+
+- **Global sensor map** — see every sensor on the network, zoom from world view to street level
+- **Telemetry viewer** — drill into individual sensor readings over time
+- **Home monitoring dashboard** — track your own indoor/outdoor environment
+- **Status dashboard** — network health, sensor uptime, data coverage
 - **Choropleth overlays** — regional heatmaps showing environmental conditions by area
+
+Respiro is a starting point, not the end goal. All WeSense data is open and queryable, so anyone can build their own visualisations on top of it. Whether you want to build a specialised air quality dashboard, integrate WeSense data into an existing platform, or create something entirely new — the data is there. We're keen to link to and promote third-party tools that use WeSense data as a base.
 
 ---
 
