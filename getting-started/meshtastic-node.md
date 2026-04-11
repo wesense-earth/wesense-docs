@@ -91,6 +91,24 @@ These are published as standard WeSense readings alongside data from all other s
 Your node won't show up on the WeSense map until the ingester has received both a position message and a telemetry message from your device. How long this takes depends entirely on your update intervals — if your position and telemetry intervals are set to the recommended values above, expect a few minutes to an hour. If they're set to the defaults (which can be days), it could take that long.
 :::
 
+## Naming Your Node
+
+Set a descriptive **long name** for your node in the Meshtastic app (**User → Long Name**). This name is sent to the WeSense ingester and displayed on the map.
+
+Currently, the ingester recognises nodes with a `WS-` prefix in their name as official WeSense outdoor sensors. All other nodes are left unclassified and the WeSense deployment classifier service will attempt to infer whether the sensor is indoor or outdoor using temperature variance, weather correlation, and other data analysis over time.
+
+### Deployment Type Tags (planned)
+
+Meshtastic doesn't currently have a metadata field for indoor/outdoor/mixed deployment type. We plan to add name-based tagging so you can indicate your deployment type:
+
+| Tag in Name | Deployment Type | Example Long Name |
+|-------------|----------------|-------------------|
+| `[in]` | Indoor | `Kitchen Sensor [in]` |
+| `[out]` | Outdoor | `Garden Node [out]` |
+| `[mix]` | Mixed (balcony, garage, etc.) | `Balcony [mix]` |
+
+This is not yet implemented in the ingester — for now, the classifier handles it automatically. We also hope to work with the Meshtastic project to add deployment type as a standard metadata field in a future firmware version.
+
 ## Deduplication
 
 Meshtastic's mesh flooding means the same message can arrive multiple times via different paths. The WeSense ingester handles this automatically with an in-memory deduplication cache (keyed on node ID, reading type, and timestamp). ClickHouse's ReplacingMergeTree provides a second layer of safety.
