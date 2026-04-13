@@ -146,19 +146,33 @@
 }
 
 /* ============================================
-   Layout — wider content area on large screens
-   VitePress default: .VPDoc.has-aside .content-container { max-width: 688px }
+   Layout — wider content on large screens
+   VitePress defaults:
+     --vp-layout-max-width: 1440px  (caps entire page)
+     .VPDoc.has-aside .content-container { max-width: 688px }
    ============================================ */
 
-@media (min-width: 1440px) {
+:root {
+  --vp-layout-max-width: 1440px;
+}
+
+@media (min-width: 1600px) {
+  :root {
+    --vp-layout-max-width: 1800px;
+  }
+
   .VPDoc.has-aside .content-container {
     max-width: 900px !important;
   }
 }
 
-@media (min-width: 1800px) {
+@media (min-width: 2000px) {
+  :root {
+    --vp-layout-max-width: 2200px;
+  }
+
   .VPDoc.has-aside .content-container {
-    max-width: 1100px !important;
+    max-width: 1200px !important;
   }
 }
 
