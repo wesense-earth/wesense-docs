@@ -59,6 +59,11 @@ flowchart TB
         C3[Reporting & Analytics]
     end
 
+    subgraph "External Services"
+        EXT1[Liam Cottle MQTT]
+        EXT2[Official Meshtastic]
+    end
+
     %% Sensor to MQTT + Home Assistant dual feed
     S -- "Protobuf/MQTT" --> EMQX
     S -. "MQTT Discovery" .-> HA
@@ -69,6 +74,10 @@ flowchart TB
 
     %% MQTT to Ingesters
     EMQX --> WSING
+
+    %% EMQX bridges to external Meshtastic services
+    EMQX -- "Bridge msh/#" --> EXT1
+    EMQX -- "Bridge msh/#" --> EXT2
 
     %% Ingesters → Storage Broker
     WSING -- "POST /readings" --> GW
