@@ -489,10 +489,10 @@ flowchart TB
     GW --> CH
     GW -->|Archive 4h| IROH
 
-    INGWS -.->|STUB: no value| MQTTDEC
-    INGMESH -->|Per-reading OK| MQTTDEC
-    INGHA -.->|Not audited| MQTTDEC
-    INGGOV -->|Per-reading OK| MQTTDEC
+    INGWS -->|Per-reading| MQTTDEC
+    INGMESH -->|Per-reading| MQTTDEC
+    INGHA -->|Per-reading| MQTTDEC
+    INGGOV -->|Per-reading| MQTTDEC
 
     MQTTDEC --> ZBOUT
     ZBOUT -->|Sign + publish| ZENOHD
