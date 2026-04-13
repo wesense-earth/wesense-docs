@@ -7,6 +7,80 @@ A single sensor reading could be ingested by multiple Public Ingestion Nodes. Ev
 1. **Unique ID Generation:** `reading_id = sha256(device_id + timestamp + reading_type + value)`
 2. **Deduplication:** Both Producer and Consumer ClickHouse databases use `reading_id` as primary key (ReplacingMergeTree).
 
+## Dual-Path Identity Invariant
+
+A reading's signed identity must be identical regardless of which path it travels:
+
+1. **Archive path:** Ingester → storage broker → ClickHouse → Parquet → iroh blob
+2. **Live path:** Ingester → MQTT → live transport → Zenoh → remote station → remote ClickHouse → remote Parquet → remote iroh blob
+
+If the payloads differ between paths, remote stations produce archives with different content hashes than the originating station. Iroh treats them as different blobs, deduplication fails, and storage doubles.
+
+**The rule:** Every field that forms part of the archived, content-addressed record must be present in the reading from the moment it leaves the ingester. The `ReadingSigner` signs a canonical JSON containing all archivable fields. That identical signed payload is sent to both MQTT and the storage broker. The live transport preserves the original signature — it does not re-sign.
+
+**The result:** A reading that travels the live path produces a byte-identical, signature-identical archive blob to the same reading travelling the archive path. Content addressing works. Dedup works. One reading, one identity, one signature, everywhere.
+
+### Canonical Reading
+
+The canonical reading is the set of fields that are signed, archived, and content-addressed. These fields are defined in `wesense-ingester-core` and are the same for every ingester:
+
+| Field | Type | Description |
+|---|---|---|
+| `device_id` | str | Unique device identifier |
+| `timestamp` | int | Unix epoch seconds from sensor |
+| `reading_type` | str | Standardised type |
+| `value` | float | The measurement |
+| `unit` | str | Unit string |
+| `latitude` | float | Decimal degrees |
+| `longitude` | float | Decimal degrees |
+| `altitude` | float or null | Metres above sea level |
+| `data_source` | str | Origin identifier (lowercase) |
+| `data_source_name` | str | Human-readable origin name |
+| `sensor_transport` | str | First-hop connection |
+| `geo_country` | str | ISO 3166-1 alpha-2 |
+| `geo_subdivision` | str | ISO 3166-2 |
+| `board_model` | str | Hardware model |
+| `sensor_model` | str | Sensor IC model |
+| `calibration_status` | str | Calibration state |
+| `deployment_type` | str | Indoor/outdoor/mixed |
+| `deployment_type_source` | str | How deployment_type was determined |
+| `node_name` | str | Human-readable device name |
+| `node_info` | str | Physical setup description |
+| `node_info_url` | str | Documentation link |
+| `location_source` | str | How coordinates were obtained |
+| `data_license` | str | Data license (default CC-BY-4.0) |
+
+Fields NOT in the canonical reading (operational metadata that varies by station):
+- `network_source` — whether received locally or via P2P
+- `ingestion_node_id` — which station processed it
+- `received_via` — local or p2p
+- `signature`, `ingester_id`, `key_version` — these travel alongside the canonical reading but are not part of it (the signature signs the canonical reading, not itself)
+
+### Signature Flow
+
+```
+Ingester:
+  1. Build canonical reading (all archivable fields)
+  2. Sign: signature = Ed25519(json.dumps(canonical, sort_keys=True))
+  3. Publish to MQTT: canonical + signature + ingester_id + key_version
+  4. POST to storage broker: canonical + signature + ingester_id + key_version + operational fields
+
+Live Transport (bridge):
+  5. Receive from MQTT (includes original signature)
+  6. Wrap in SignedReading protobuf using ORIGINAL signature (do not re-sign)
+  7. Publish to Zenoh
+
+Remote Station:
+  8. Receive from Zenoh, extract SignedReading
+  9. Verify original signature against trust list
+  10. Write to ClickHouse with original signature, ingester_id, key_version
+
+Archive (both stations):
+  11. Query ClickHouse → same fields, same signature
+  12. Build Parquet → byte-identical output
+  13. Store in iroh → same BLAKE3 hash
+```
+
 ## Ensuring Archive Integrity
 
 1. **Signature preservation:** Ed25519 signatures are stored in ClickHouse alongside every reading (`signature`, `ingester_id`, `key_version` columns) and carried through to Parquet archives. This is the primary defence against bad data injection — every reading can be traced back to the ingester that signed it.

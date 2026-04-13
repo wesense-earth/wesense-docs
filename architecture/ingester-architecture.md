@@ -330,15 +330,20 @@ wesense/decoded/govaq/nz/canterbury/ecan-st-albans         # Govt air quality
 
 The MQTT publisher (`WeSensePublisher.publish_reading()`) serialises whatever dict it receives — it doesn't add or remove fields. The responsibility is on each ingester to populate the MQTT dict with all fields that the storage broker writes to ClickHouse, so that P2P replication via the live transport produces identical data on remote stations.
 
-## Two Write Paths
+## Two Write Paths and the Canonical Reading
 
 Each ingester writes data via two independent paths:
 
-1. **Storage broker path** (local storage): Ingester → `POST /readings` → Storage Broker → ClickHouse. This carries the **full** reading dict with all fields. Used when `GATEWAY_URL` is set; falls back to direct ClickHouse writes via `BufferedClickHouseWriter` when unset.
+1. **Storage broker path** (local storage): Ingester → `POST /readings` → Storage Broker → ClickHouse → Parquet archive → iroh blob
+2. **MQTT path** (P2P distribution): Ingester → MQTT → live transport → Zenoh → remote station → remote ClickHouse → remote Parquet archive → remote iroh blob
 
-2. **MQTT path** (P2P distribution): Ingester → `publish_reading(mqtt_dict)` → MQTT → live transport → Zenoh → remote station. This carries only what the ingester puts in `mqtt_dict`.
+**Both paths must carry the identical signed payload.** This is the Dual-Path Identity Invariant — see [Data Integrity](./data-integrity) for the full specification.
 
-Both paths must carry the same fields. The `wesense-live-transport` is the single MQTT↔Zenoh integration point — ingesters do not interact with Zenoh directly.
+The ingester builds a single **canonical reading** (defined in `wesense-ingester-core`) containing all archivable fields, signs it with Ed25519, then sends the same signed payload to both MQTT and the storage broker. The live transport preserves the original signature when forwarding to Zenoh — it does not re-sign.
+
+This ensures that a reading archived by a remote station (via the live path) produces a byte-identical Parquet file with the same BLAKE3 content hash as the originating station's archive. One reading, one identity, one signature, everywhere.
+
+The `wesense-live-transport` is the single MQTT↔Zenoh integration point — ingesters do not interact with Zenoh directly.
 
 ## Timestamp and Timezone Handling
 
