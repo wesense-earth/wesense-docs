@@ -19,11 +19,11 @@ WeSense-originated data (readings from WeSense sensors, Meshtastic devices inges
 
 Attribution keeps the project visible — every research paper, government report, or dashboard using WeSense data credits the network that produced it. This helps the project grow and sustains the community that maintains it.
 
-**Where the license is declared:**
+**Where the license will be declared (planned):**
 
-1. In the archive manifest — every Parquet archive is self-documenting
-2. On the website and docs
-3. In the `data_license` field per reading (see Upstream Source Licensing below)
+1. In the archive manifest — so every Parquet archive is self-documenting
+2. On the website and docs (done — this page)
+3. In a `data_license` field per reading (not yet implemented — see Upstream Source Licensing below)
 
 ## Upstream Source Licensing
 
