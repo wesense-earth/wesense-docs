@@ -73,55 +73,6 @@ A simple, community-run web server that acts as a bridge for resource-constraine
 }
 ```
 
-## The Hub Finder Webapp
-
-A simple static webapp for discovering available MQTT hubs. Hosted on IPFS for decentralization with GitHub Pages as fallback.
-
-**Hosting:**
-
-- **Primary:** IPFS - `dweb.link/ipfs/{CID}` (accessible via any IPFS gateway)
-- **Fallback:** GitHub Pages - `wesense.github.io/hub-finder`
-- **Updates:** Via IPNS for mutable pointer to latest version
-
-**How it works:**
-
-1. User visits the webapp (via any IPFS gateway or GitHub Pages)
-2. Webapp fetches hub list from IPFS (the OrbitDB data exported as JSON)
-3. Displays available hubs with region, uptime, sensor count
-4. User selects a hub
-5. Webapp shows MQTT settings to copy into Meshtastic app
-
-**Example interface:**
-
-```
-+------------------------------------------+
-|  WeSense Hub Finder                      |
-+------------------------------------------+
-|  Region: [All v]                         |
-|                                          |
-|  +----------------------------------+   |
-|  | hub.wesense.earth                |   |
-|  | Regions: NZ, AU                  |   |
-|  | Uptime: 99.8% | Sensors: 3500    |   |
-|  | [Select]                         |   |
-|  +----------------------------------+   |
-|                                          |
-|  +----------------------------------+   |
-|  | hub2.community.net               |   |
-|  | Regions: US, CA                  |   |
-|  | Uptime: 98.2% | Sensors: 1200    |   |
-|  | [Select]                         |   |
-|  +----------------------------------+   |
-+------------------------------------------+
-
-MQTT Settings for Meshtastic:
-  Server: hub.wesense.earth
-  Port: 1883
-  [Copy]
-```
-
-This approach is fully decentralized - the webapp itself is on IPFS, and the data comes from IPFS-hosted OrbitDB exports.
-
 ## The MQTT Hub (EMQX)
 
 **Status:** Deployed and running. EMQX 5.8.9 with authentication (salted SHA-256), Meshtastic forwarding bridges, and dashboard lockdown.
