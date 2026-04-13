@@ -92,7 +92,7 @@ export default defineConfig({
           { text: 'Data Quality', link: '/architecture/data-quality' },
           { text: 'Governance & Trust', link: '/architecture/governance-and-trust' },
           { text: 'Data Licensing', link: '/architecture/data-licensing' },
-          { text: 'Future', link: '/architecture/future' },
+          { text: 'Future Ideas', link: '/architecture/future' },
         ],
       },
       {

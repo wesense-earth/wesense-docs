@@ -1,11 +1,8 @@
-# Future Considerations
+# Future Ideas
 
-## Additional Topic Dimensions
-
-The current structure (`/wesense/v2/live/{country}/{subdivision}/{device_id}`) already provides good granularity. Future extensions might include:
-
-- ~~Indoor/outdoor classification in payload metadata~~ — Done: `deployment_type` field in readings, P2P classification sharing via iroh blob (see 4b.5)
-- Sensor quality tiers for data confidence levels
+::: warning Unvetted Ideas
+These are early-stage ideas that haven't been through architectural review. They're captured here to avoid losing them, but should be moved to [GitHub Discussions](https://github.com/wesense-earth/wesense/discussions) or feature requests before any implementation work begins.
+:::
 
 ## Quality of Service
 
@@ -33,7 +30,7 @@ This creates ~40,000 geographic partitions (vs ~4,000 subdivisions), allowing ne
 
 ### Hierarchical Aggregation
 
-Pre-compute aggregates at multiple levels to avoid raw data downloads. Note: Never use daily averages as they destroy time-of-day signal critical for environmental analysis (see Section 5.4).
+Pre-compute aggregates at multiple levels to avoid raw data downloads. Note: Never use daily averages as they destroy time-of-day signal critical for environmental analysis.
 
 | Level       | Granularity                  | Use Case          |
 | ----------- | ---------------------------- | ----------------- |
@@ -72,12 +69,6 @@ Consumers declare interest profiles:
 
 The network only routes matching data, reducing bandwidth by orders of magnitude.
 
-### Tiered Storage
-
-- **Hot**: Last 24h in ClickHouse (fast queries)
-- **Warm**: Last 90 days in compressed Parquet on local disk
-- **Cold**: Historical in highly compressed columnar format in the distributed archive (via storage broker)
-
 ### Edge Intelligence
 
 Hubs perform anomaly detection, filtering, and compression so only significant data propagates globally. Stable readings are summarised; anomalies are forwarded in full detail.
@@ -90,7 +81,6 @@ Hubs perform anomaly detection, filtering, and compression so only significant d
 | Consumer model | Sync all archives   | Federated queries        |
 | Aggregation    | Device + Daily      | Multi-level hierarchy    |
 | Discovery      | Full OrbitDB sync   | Probabilistic indexes    |
-| Storage        | Full replication    | Selective + tiered       |
 | Data routing   | All data to all     | Interest-based filtering |
 
 The key insight: the current "replicate everything locally" model works for millions but not billions. The evolution toward **federated queries** means consumers ask questions and the network returns answers, rather than downloading all data first.
