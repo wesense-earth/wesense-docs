@@ -45,31 +45,57 @@ All services within the deployment share the same CA for mutual trust. Services 
 
 The ClickHouse schema evolves through non-breaking `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` migrations with default values. Old code continues reading old columns; new columns are invisible to code that doesn't use them. This is critical because stations across the P2P network may be running different versions simultaneously.
 
-**Migration pattern (from `wesense-clickhouse-live/migrations/`):**
+### Automated Migration System
+
+Schema migrations are applied automatically on every container start — operators just run `docker compose pull && docker compose restart` and the database updates itself.
+
+**How it works:**
+
+1. Numbered `.sql` files in `wesense/clickhouse/migrations/` contain idempotent schema changes
+2. A `wesense.schema_migrations` table in ClickHouse tracks which migrations have been applied
+3. `migrate.sh` runs in the background after ClickHouse starts, scans the migrations directory, skips any already recorded, and applies the rest in order
+4. Each migration is recorded in `schema_migrations` on success
+
+**Migration file format:**
 
 ```sql
--- Every migration uses IF NOT EXISTS and provides a default
+-- Migration 005: Add data_license column for per-reading license tracking
+
 ALTER TABLE wesense.sensor_readings
-ADD COLUMN IF NOT EXISTS signature String DEFAULT '',
-ADD COLUMN IF NOT EXISTS ingester_id LowCardinality(String) DEFAULT '',
-ADD COLUMN IF NOT EXISTS key_version UInt32 DEFAULT 0;
+    ADD COLUMN IF NOT EXISTS data_license LowCardinality(String) DEFAULT 'CC-BY-4.0';
 ```
 
-**Completed migrations:**
+Files are named `NNN_description.sql` where `NNN` is a zero-padded sequence number. All statements must be idempotent (`ADD COLUMN IF NOT EXISTS`, `MODIFY COLUMN`) as a safety net.
+
+**Fresh installs vs existing deployments:**
+
+- **Fresh install:** `01-create-tables.sql` creates the full schema (including all columns) via `docker-entrypoint-initdb.d`. `migrate.sh` then runs all migrations as no-ops and records them in `schema_migrations`.
+- **Existing deployment:** `01-create-tables.sql` doesn't re-run (data directory isn't empty). `migrate.sh` creates `schema_migrations` (empty), runs all migrations in order — historical ones are no-ops since columns already exist, new ones apply the changes.
+
+Both paths produce the same result: all columns present, all migrations recorded.
+
+**Adding a new migration:**
+
+1. Create `wesense/clickhouse/migrations/NNN_description.sql` with idempotent ALTER statements
+2. Add the same column to `wesense/clickhouse/init/01-create-tables.sql` (for fresh installs)
+3. Update the storage broker model, column list, and row builder if the new column flows through the ingestion pipeline
+4. Commit. On next `docker compose pull && docker compose restart`, all stations get the change automatically.
+
+### Migrations Applied
 
 | Migration | Columns Added | Purpose |
 |---|---|---|
 | 001 | `deployment_type_source`, `node_info`, `node_info_url` | Deployment classification metadata |
 | 002 | `signature`, `ingester_id`, `key_version` | Ed25519 signing for archive integrity |
 | 003 | `received_via` | Track local vs P2P origin |
-| 001b | `data_source_name` | Human-readable source labels |
-| 002b | (data updates) | Standardise `data_source` values to lowercase |
+| 004 | `data_source_name` + default fixes | Human-readable source labels, fix stale defaults |
+| 005 | `data_license` | Per-reading license tracking (default CC-BY-4.0) |
 
-**Archive schema versioning:**
+### Archive Schema Versioning
 
-Parquet archives include a schema version in the manifest (e.g., `v1.0`, `v1.1`). OrbitDB entries include `schema_version`. Schema-aware consumers check the version before importing and skip unsupported versions. Archives are immutable — they're written once with the schema version at the time of archival.
+Parquet archives include a schema version in the manifest (e.g., `v1.0`, `v1.1`). OrbitDB entries include `schema_version`. Schema-aware consumers check the version before importing and skip unsupported versions. Archives are immutable — they're written once with the schema version at the time of archival. Old archives without newer columns (e.g., `data_license`) are still valid; consumers treat missing columns as defaults.
 
-**Signing payload versioning:**
+### Signing Payload Versioning
 
 Changes to which fields are included in the Ed25519 signing payload require a version bump (v1 → v2). Old signatures remain valid under their declared version. The trust snapshot in each archive records which payload version each ingester used, so verification knows which fields to check.
 

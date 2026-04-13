@@ -19,11 +19,11 @@ WeSense-originated data (readings from WeSense sensors, Meshtastic devices inges
 
 Attribution keeps the project visible — every research paper, government report, or dashboard using WeSense data credits the network that produced it. This helps the project grow and sustains the community that maintains it.
 
-**Where the license will be declared (planned):**
+**Where the license is declared:**
 
-1. In the archive manifest — so every Parquet archive is self-documenting
-2. On the website and docs (done — this page)
-3. In a `data_license` field per reading (not yet implemented — see Upstream Source Licensing below)
+1. In the archive manifest — every Parquet archive is self-documenting (the `data_license` column flows from ClickHouse into Parquet automatically)
+2. On the website and docs (this page)
+3. In the `data_license` column per reading in ClickHouse (default `CC-BY-4.0`, overridable per ingester for sources with different licenses)
 
 ## Upstream Source Licensing
 
@@ -39,7 +39,7 @@ To handle this, the architecture supports per-source license tracking:
 | Donated research datasets | Varies | Must be declared at import time |
 | Commercial weather networks | Varies | May restrict redistribution — check before ingesting |
 
-<!-- TODO: Add a `data_license` field to the reading schema (LowCardinality String). Ingesters set this based on their source's known license. The storage broker includes it in Parquet archives. Default: "CC-BY-4.0" for WeSense-originated data. This enables consumers to filter by license if they need to (e.g., a researcher who can only use CC0 or public domain data). -->
+The `data_license` column defaults to `CC-BY-4.0` in ClickHouse. Ingesters for external sources override this with the appropriate license string (e.g., `NZGOAL` for NZ government data). Consumers can filter by license if needed.
 
 **Rule for new ingesters:** Before writing an ingester for an external data source, verify the source's license permits redistribution. If it does, document the license in the ingester's README and set `data_license` appropriately. If it doesn't, the data cannot be ingested into WeSense.
 
