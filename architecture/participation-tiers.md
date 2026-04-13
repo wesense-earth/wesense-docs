@@ -35,7 +35,7 @@
 
 **Producer Configuration:**
 
-```env
+```bash
 # .env configuration
 ZENOH_MODE=peer                    # Or client if behind NAT
 ZENOH_LISTEN=tcp/0.0.0.0:7447     # Only if peer mode
