@@ -27,8 +27,8 @@ features:
     linkText: Station guide
   - title: Contribute Code
     details: Write new ingesters, improve the firmware, build visualisations, or strengthen the P2P infrastructure.
-    link: /developers/architecture
-    linkText: Developer docs
+    link: /architecture/
+    linkText: Architecture & developer docs
   - title: Build Hardware
     details: Design enclosures, test sensor combinations, or create PCB layouts for community sensor builds.
     link: /hardware/board-configurations
