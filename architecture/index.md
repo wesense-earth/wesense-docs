@@ -146,7 +146,7 @@ The following mitigations are in place (implemented 2026-04-12):
 
 4. **Disk space monitoring** — checks filesystem usage via `fs.statfs` every 5 minutes. At 95%, blocks all blockstore writes. At 90%, logs warnings. Writes also blocked reactively if any `put()` fails with a disk-full error. Resumes when space drops below 90%.
 
-5. **Helia v6 compatibility wrapper** (`helia-compat.js`) — adapts Helia's streaming `blockstore.get()` (AsyncGenerator) to the non-streaming API (Promise<Uint8Array>) that OrbitDB expects. Also wraps IPFSBlockStorage to handle both APIs transparently.
+5. **Helia v6 compatibility wrapper** (`helia-compat.js`) — adapts Helia's streaming `blockstore.get()` (`AsyncGenerator`) to the non-streaming API (`Promise<Uint8Array>`) that OrbitDB expects. Also wraps IPFSBlockStorage to handle both APIs transparently.
 
 > **Upstream PR:** [orbitdb/orbitdb#1251](https://github.com/orbitdb/orbitdb/issues/1251) — filed for oplog entry expiry/TTL support. The TTL implementation is in our fork at `wesense-earth/orbitdb#feat/ttl`.
 
