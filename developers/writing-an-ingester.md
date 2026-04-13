@@ -627,9 +627,21 @@ You define your own env vars for source-specific config (API URLs, poll interval
 
 4. **Verify readings appear** with the expected fields — especially `geo_country`, `geo_subdivision`, `reading_type`, `value`, and `unit`.
 
-## Adding to Docker Compose
+## Deployment
 
-Once your ingester works, add it to `wesense/docker-compose.yml`:
+### Running Your Ingester
+
+If you're writing an ingester, you'll most likely be the one running it — at least initially. An ingester runs as part of a WeSense station, so you'll need the station profile and its dependencies (EMQX, ClickHouse, storage broker, etc.). See [Operating a Station](/station-operators/operate-a-station) for the full setup guide, including disk space and resource requirements.
+
+Your ingester gets its own Docker Compose profile so that it's opt-in — not everyone running a station will want every ingester. To run it alongside the standard station services:
+
+```bash
+docker compose --profile station --profile ingester-mydata up -d
+```
+
+### Adding to Docker Compose
+
+Add your ingester to `wesense/docker-compose.yml` with its own profile name:
 
 ```yaml
 ingester-mydata:
@@ -647,7 +659,7 @@ ingester-mydata:
   volumes:
     - ingester-mydata-cache:/app/cache
     - ingester-mydata-logs:/app/logs
-  profiles: [contributor, station]
+  profiles: [ingester-mydata]
   depends_on:
     config-check:
       condition: service_completed_successfully
