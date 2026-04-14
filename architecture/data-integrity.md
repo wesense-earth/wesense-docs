@@ -28,7 +28,8 @@ The canonical reading is the set of fields that are signed, archived, and conten
 |---|---|---|
 | `device_id` | str | Unique device identifier |
 | `timestamp` | int | Unix epoch seconds from sensor |
-| `reading_type` | str | Standardised type |
+| `reading_type` | str | Standardised type (e.g. `pm2_5`) |
+| `reading_type_name` | str | Human-readable display name (e.g. `PM2.5`) |
 | `value` | float | The measurement |
 | `unit` | str | Unit string |
 | `latitude` | float | Decimal degrees |
@@ -148,12 +149,36 @@ Files are named `NNN_description.sql` where `NNN` is a zero-padded sequence numb
 
 Both paths produce the same result: all columns present, all migrations recorded.
 
-**Adding a new migration:**
+### Adding a New Column
 
-1. Create `wesense/clickhouse/migrations/NNN_description.sql` with idempotent ALTER statements
-2. Add the same column to `wesense/clickhouse/init/01-create-tables.sql` (for fresh installs)
-3. Update the storage broker model, column list, and row builder if the new column flows through the ingestion pipeline
-4. Commit. On next `docker compose pull && docker compose restart`, all stations get the change automatically.
+When a new column is needed (e.g., a new metadata dimension that doesn't fit existing fields), changes are required in **six places** to keep ClickHouse, the ingestion pipeline, archives, and the canonical reading consistent. Miss any one and the column either won't appear, won't be signed, or won't archive correctly.
+
+**Checklist for adding a column `new_field`:**
+
+1. **ClickHouse migration** — `wesense/clickhouse/migrations/NNN_add_new_field.sql` with idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. Mirror the same file in `wesense-clickhouse-live/migrations/` for manual reference.
+2. **ClickHouse schema (fresh installs)** — add the column to `wesense/clickhouse/init/01-create-tables.sql` and `wesense-clickhouse-live/create_sensor_readings.sql`.
+3. **Canonical reading** — in `wesense-ingester-core/wesense_ingester/pipeline.py`:
+   - Add to `CANONICAL_FIELDS` if it's part of the signed/archived payload
+   - Add to `build_canonical()` with explicit type coercion and default
+4. **Storage broker model** — in `wesense-storage-broker/src/wesense_gateway/models/reading.py`:
+   - Add to `ReadingIn` with its default
+   - Add to the `field_validator` list if it's a string field needing None-to-empty coercion
+5. **Storage broker pipeline** — in `wesense-storage-broker/src/wesense_gateway`:
+   - Add to `CLICKHOUSE_COLUMNS` in `storage/clickhouse.py`
+   - Add to the `_build_row` tuple in `pipeline/processor.py`
+6. **Parquet archive** (if the column should be in archives) — in `wesense-storage-broker/src/wesense_gateway/archive/builder.py`:
+   - Add to `PARQUET_SCHEMA` with appropriate PyArrow type
+   - Add to the `SELECT` query in `_get_readings_for_period()`
+   - Add to the `columns` list that maps query results to dicts
+7. **Live transport** — in `wesense-live-transport/bridge.py`:
+   - Add to `BRIDGE_COLUMNS`
+   - Add to the row tuple in `_on_inbound_reading`
+
+Once all pieces are in place, `docker compose pull && docker compose restart` on every station applies the change automatically via the migration system.
+
+**Whether to include in the canonical reading:** Only include fields that are part of the reading's identity — things that are intrinsic to what was measured. Operational metadata (`network_source`, `ingestion_node_id`, `received_via`) stays out of the canonical reading because it varies by which station is recording.
+
+**Whether to include in archives:** Most canonical fields go into Parquet. Operational metadata generally doesn't — archives should be portable across stations. The ClickHouse columns `network_source`, `ingestion_node_id`, `received_via` are NOT in the Parquet schema.
 
 ### Migrations Applied
 
@@ -164,6 +189,7 @@ Both paths produce the same result: all columns present, all migrations recorded
 | 003 | `received_via` | Track local vs P2P origin |
 | 004 | `data_source_name` + default fixes | Human-readable source labels, fix stale defaults |
 | 005 | `data_license` | Per-reading license tracking (default CC-BY-4.0) |
+| 006 | `reading_type_name` | Human-readable reading type labels (e.g. PM2.5 for pm2_5) |
 
 ### Archive Schema Versioning
 
