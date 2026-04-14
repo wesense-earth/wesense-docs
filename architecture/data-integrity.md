@@ -190,23 +190,58 @@ Once all pieces are in place, `docker compose pull && docker compose restart` on
 | 004 | `data_source_name` + default fixes | Human-readable source labels, fix stale defaults |
 | 005 | `data_license` | Per-reading license tracking (default CC-BY-4.0) |
 | 006 | `reading_type_name` | Human-readable reading type labels (e.g. PM2.5 for pm2_5) |
+| 007 | `signing_payload_version` | Which version of the canonical schema was signed (future-proofs signature verification) |
 
 ### Archive Schema Versioning
 
-Parquet archives include a schema version in the manifest (e.g., `v1.0`, `v1.1`). OrbitDB entries include `schema_version`. Schema-aware consumers check the version before importing and skip unsupported versions. Archives are immutable — they're written once with the schema version at the time of archival. Old archives without newer columns (e.g., `data_license`) are still valid; consumers treat missing columns as defaults.
+Each Parquet archive's manifest records `parquet_schema_version` (e.g., `"v1"`). Schema-aware consumers check the version before importing. Archives are append-only — old archives with old schemas coexist with new archives indefinitely. Adding a new column doesn't invalidate old archives; they just lack that column, which consumers handle by filling with defaults. **Archives are never rebuilt to backfill a new column** — that doesn't scale to millions of nodes.
 
 ### Signing Payload Versioning
 
-Changes to which fields are included in the Ed25519 signing payload require a version bump (v1 → v2). Old signatures remain valid under their declared version. The trust snapshot in each archive records which payload version each ingester used, so verification knows which fields to check.
+Every reading carries `signing_payload_version` recording which canonical schema was used to build the signed bytes. The verifier uses this value to select the correct builder:
+
+- Reading signed with `v1` → verifier calls `build_canonical_v1()` to reconstruct the exact bytes that were signed
+- Reading signed with `v2` → verifier calls `build_canonical_v2()`
+
+**The v1 canonical schema is frozen.** `CANONICAL_FIELDS_V1` and `build_canonical_v1()` in `wesense-ingester-core` must never change — they produce byte-identical output forever so that signatures created today remain verifiable in 2225. A CI test enforces this (`tests/test_pipeline.py::test_canonical_fields_v1_is_frozen`).
+
+**Adding canonical fields** (or changing their types/defaults) requires a new version:
+
+1. Define `CANONICAL_FIELDS_V2` and `build_canonical_v2()` in `pipeline.py`
+2. Register it in `CANONICAL_BUILDERS`
+3. Bump `CURRENT_CANONICAL_VERSION = 2`
+4. New readings are signed with v2; old readings continue to verify against v1
+5. Both versions coexist in ClickHouse and in Parquet archives — `signing_payload_version` tells anyone looking which one to use
+
+**Archive manifest** also records `current_signing_payload_version` — the version this archiver was writing when the archive was built. Useful context for consumers trying to understand a mixed batch.
 
 ## Node Version Compatibility
 
-Stations across the P2P network will inevitably run different software versions. The architecture handles version skew through:
+Stations across the P2P network will inevitably run different software versions. At a million nodes, we cannot coordinate upgrades — the architecture must handle version skew gracefully.
 
-1. **Additive-only schema changes** — New columns have defaults. A station running older code ignores columns it doesn't know about. Readings from newer stations are accepted; the unknown fields simply use defaults.
+### What Works
 
-2. **Self-describing archives** — Each Parquet archive carries its own schema and trust snapshot. A consumer doesn't need to know what version of the software produced it — the archive contains everything needed to interpret it.
+1. **Additive-only schema changes** — New columns have defaults. A station running older code doesn't have the column; a station running newer code does. Both keep working.
 
-3. **Protocol-level compatibility** — MQTT topics and Zenoh key expressions are stable. The message payload (JSON) is extensible: new fields are added, existing fields are never removed or renamed. Consumers that don't recognise a field ignore it.
+2. **Signature verification across versions** — `signing_payload_version` lets verifiers reconstruct the exact bytes that were signed, regardless of what canonical version the verifier itself considers current. Old signatures verify forever.
 
-4. **OrbitDB schema tolerance** — OrbitDB documents are schema-free. New fields in node registrations or trust entries are ignored by older code.
+3. **Frozen canonical builders** — v1 is FROZEN. `CANONICAL_FIELDS_V1` and `build_canonical_v1()` cannot change without breaking signature verification for billions of existing readings. Any evolution happens through new versions.
+
+4. **Self-describing archives** — Each Parquet archive carries its Arrow schema, and its manifest records `parquet_schema_version`. Consumers don't need to know which software version built the archive.
+
+5. **Unknown fields dropped on receive** — When station B receives a reading from station A with fields B doesn't understand, B stores only the fields it knows. B's resulting archive is a smaller but valid archive of B's observation. A's archive (with all fields) is also valid. Both get gossiped; consumers prefer the more complete one.
+
+6. **Version skew warnings** — The live transport logs a warning when it receives a reading with `signing_payload_version` higher than what it supports. The reading is still stored; operators get visibility to upgrade.
+
+### What This Means in Practice
+
+- **Cross-version divergence is expected.** Stations running different versions produce different archives for the same reading. This is NOT the Dual-Path Identity Invariant violation — that invariant is within-version only.
+- **Consumers get the best available.** Gossip propagates archives from all versions; consumers with recent code get the richest data by preferring newer archives when available.
+- **No forced upgrades.** A 2026 raspberry pi can keep running forever and its archives stay valid. It just won't have fields introduced later.
+- **No coordinated migrations.** Adding a canonical field doesn't require any station to rebuild anything. New readings get the new field; old readings don't.
+
+### Protocol-Level Compatibility
+
+- MQTT topics and Zenoh key expressions are stable over time
+- The JSON payload is extensible: new fields may be added; existing fields are never removed or renamed within a payload version
+- OrbitDB documents are schema-free — new fields in node registrations or trust entries are ignored by older code
