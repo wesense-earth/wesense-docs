@@ -134,11 +134,8 @@ and any source-specific quirks.
 """
 
 import os
-import signal
-import time
 
-from wesense_ingester import ReadingPipeline, setup_logging
-from wesense_ingester.mqtt.publisher import MQTTPublisherConfig
+from wesense_ingester import ReadingPipeline, Shutdown, setup_logging
 
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "300"))  # seconds
 
@@ -146,29 +143,19 @@ POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "300"))  # seconds
 class MyDataIngester:
 
     def __init__(self):
-        self.logger = setup_logging("mydata_ingester")
+        self.logger = setup_logging("mydata")
 
-        # One pipeline replaces what used to be 6 separate components:
-        # dedup, geocoder, gateway client, MQTT publisher, key manager,
-        # and signer. The pipeline builds the canonical reading, signs it
-        # once, and sends the identical signed payload to both MQTT and
-        # the storage broker. See the architecture's data-integrity page
-        # for the full Dual-Path Identity Invariant guarantee.
-        mqtt_config = MQTTPublisherConfig(
-            broker=os.getenv("MQTT_BROKER", "localhost"),
-            port=int(os.getenv("MQTT_PORT", "1883")),
-            username=os.getenv("MQTT_USERNAME"),
-            password=os.getenv("MQTT_PASSWORD"),
-            client_id="mydata_publisher",
-        )
-        self.pipeline = ReadingPipeline(name="mydata", mqtt_config=mqtt_config)
+        # The pipeline handles everything after the reading leaves your code:
+        # dedup, geocoding, canonical reading construction, Ed25519 signing,
+        # MQTT publishing, storage broker POST, AND OrbitDB trust registry.
+        # MQTT config is read from env vars automatically — WESENSE_OUTPUT_*
+        # or MQTT_* fallback.
+        self.pipeline = ReadingPipeline(name="mydata")
 
         # ── Your data source setup ──────────────────────────────
         # Initialise your API client, MQTT subscriber, webhook
         # server, or whatever connects to your data source.
         # ...
-
-        self._running = True
 
     # ── The only code you write per reading ─────────────────────
     # Build a flat dict with the reading's fields and hand it to the
@@ -190,21 +177,21 @@ class MyDataIngester:
         """Hand a reading to the WeSense pipeline."""
         self.pipeline.process({
             "device_id": device_id,
-            "timestamp": timestamp,
-            "reading_type": reading_type,
+            "timestamp": timestamp,                # Unix epoch seconds from sensor
+            "reading_type": reading_type,          # e.g. "temperature", "pm2_5"
             "value": value,                        # See "Determinism" section below
-            "unit": unit,
+            "unit": unit,                          # e.g. "°C", "µg/m³"
             "latitude": lat,
             "longitude": lon,
             "data_source": "mydata",               # ← your data source ID
-            "data_source_name": "My Data",         # ← human-readable
+            "data_source_name": "My Data",         # ← human-readable display name
             "sensor_transport": "",                # first-hop (wifi, lora, lorawan, or "")
-            "deployment_type": "OUTDOOR",
+            "deployment_type": "OUTDOOR",          # or INDOOR, MIXED, or ""
             "deployment_type_source": "manual",
-            "location_source": "manual",
+            "location_source": "manual",           # or gps, network
             "node_name": station_name,
             "data_license": "CC-BY-4.0",           # or a source-specific license
-            "network_source": "api",               # operational (not signed)
+            "network_source": "api",               # operational metadata (not signed)
         })
 
     # ── Your data source loop ──────────────────────────────────
@@ -233,27 +220,21 @@ class MyDataIngester:
         pass
 
     # ── Lifecycle ──────────────────────────────────────────────
+    # Shutdown installs SIGINT/SIGTERM handlers automatically.
+    # Use shutdown.sleep() instead of time.sleep() so the loop
+    # exits promptly when the container stops.
 
     def run(self) -> None:
-        """Main loop — poll on interval until shutdown."""
-        signal.signal(signal.SIGINT, self._handle_signal)
-        signal.signal(signal.SIGTERM, self._handle_signal)
-
+        shutdown = Shutdown(name="mydata")
         self.logger.info("Starting (poll interval: %ds)", POLL_INTERVAL)
-        while self._running:
+
+        while not shutdown.requested:
             try:
                 self.poll()
             except Exception as e:
-                self.logger.error("Poll failed: %s", e)
-            time.sleep(POLL_INTERVAL)
+                self.logger.error("Poll failed: %s", e, exc_info=True)
+            shutdown.sleep(POLL_INTERVAL)
 
-        self.shutdown()
-
-    def _handle_signal(self, signum, frame):
-        self.logger.info("Received signal %d, shutting down...", signum)
-        self._running = False
-
-    def shutdown(self) -> None:
         self.pipeline.close()
         self.logger.info("Shutdown complete.")
 
@@ -266,6 +247,8 @@ def main():
 if __name__ == "__main__":
     main()
 ```
+
+This is the entire ingester. Roughly 80 lines in total, of which maybe 15 are yours — the rest is boilerplate that makes the structure clear. For a polling data source like a REST API, you only need to write `poll()` and fill in the reading dict. Everything else is provided by the core library.
 
 ### 4. What You Write vs What Core Provides
 
@@ -281,6 +264,9 @@ if __name__ == "__main__":
 | Ed25519 signing                     | Core (pipeline)       | Auto-generated keys, signs the canonical bytes, includes `signing_payload_version` in payload |
 | MQTT publish                        | Core (pipeline)       | Same signed payload sent to MQTT for P2P distribution                                        |
 | Storage broker POST                 | Core (pipeline)       | Same signed payload POSTed to storage broker                                                 |
+| OrbitDB trust registration          | Core (pipeline)       | Registers the ingester's public key and runs trust sync (disable with `enable_orbitdb_registry=False`) |
+| Signal handling (SIGINT/SIGTERM)    | Core (Shutdown)       | `Shutdown` class installs handlers, provides `requested` flag and `sleep()` helper           |
+| MQTT config from env                | Core                  | `WESENSE_OUTPUT_*` with fallback to `MQTT_*` — no explicit config construction needed        |
 | P2P distribution                    | Live Transport        | Subscribes to MQTT decoded topics, forwards to Zenoh (preserves original signature)          |
 | Archiving to Parquet                | Storage Broker        | Archives ClickHouse data to the distributed blob store on schedule                           |
 

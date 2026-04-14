@@ -25,68 +25,73 @@ wesense-ingester-core/
 ├── wesense_ingester/
 │   ├── __init__.py
 │   │
-│   ├── clickhouse/
-│   │   ├── writer.py           # BufferedClickHouseWriter
-│   │   │                       #   - Configurable batch size (default 100)
-│   │   │                       #   - Async flush interval (default 10s)
-│   │   │                       #   - Thread-safe row buffer
-│   │   │                       #   - Retry on failure (rows returned to queue)
-│   │   │                       #   - Flexible column mapping
-│   │   └── connection.py       # Connection management, health checks
+│   ├── pipeline.py             # ReadingPipeline — the single entry point
+│   │                           #   every adapter uses. Handles:
+│   │                           #   - Dedup check
+│   │                           #   - Geocoding (if adapter didn't already)
+│   │                           #   - Canonical reading construction (v1 frozen)
+│   │                           #   - Ed25519 signing with signing_payload_version
+│   │                           #   - MQTT publish + storage broker POST (same bytes)
+│   │                           #   - OrbitDB registry (register_node + trust sync)
+│   │                           # Adapters never touch signing, publishing, or
+│   │                           # gateway clients directly — just call pipeline.process(dict).
+│   │
+│   ├── runtime.py              # Shutdown helper
+│   │                           #   - Installs SIGINT/SIGTERM handlers on construction
+│   │                           #   - shutdown.requested flag and shutdown.sleep(N)
+│   │                           #   - Works for polling, subscriber, or async ingesters
+│   │
+│   ├── reading_types.py        # Standard reading type registry
+│   │                           #   - Maps reading_type → (reading_type_name, unit)
+│   │                           #   - Pipeline auto-fills reading_type_name from here
 │   │
 │   ├── gateway/
-│   │   └── client.py           # GatewayClient
-│   │                           #   - POST /readings to storage broker
-│   │                           #   - Used when GATEWAY_URL is set
-│   │                           #   - Falls back to direct ClickHouse writes when unset
+│   │   └── client.py           # GatewayClient — POST /readings to storage broker
+│   │                           # (Used by the pipeline, not directly by adapters.)
+│   │
+│   ├── mqtt/
+│   │   └── publisher.py        # WeSensePublisher — decoded output to MQTT
+│   │                           #   Topic: wesense/decoded/{source}/{country}/{subdivision}/{device_id}
+│   │                           #   Reads config from WESENSE_OUTPUT_* with MQTT_* fallback.
 │   │
 │   ├── geocoding/
-│   │   ├── geocoder.py         # HybridGeocoder
-│   │   │                       #   - Offline: GeoNames (fast, no network)
-│   │   │                       #   - Online: Nominatim (fallback, rate-limited)
-│   │   │                       #   - LRU cache with disk persistence
-│   │   ├── iso3166.py          # ISO 3166 country/subdivision mapper
-│   │   │                       #   - Country codes (ISO 3166-1 alpha-2)
-│   │   │                       #   - Subdivision codes (ISO 3166-2)
-│   │   │                       #   - Stable codes, not affected by name changes
+│   │   ├── geocoder.py         # Offline GeoNames reverse geocoder
+│   │   ├── iso3166.py          # ISO 3166-1 alpha-2 + ISO 3166-2 mapper
 │   │   └── worker.py           # Background geocoding thread
 │   │
 │   ├── cache/
-│   │   ├── disk_cache.py       # JSON persistence
-│   │   │                       #   - Atomic writes (write-then-rename)
-│   │   │                       #   - Configurable save frequency
-│   │   │                       #   - TTL expiration on load
-│   │   │                       #   - Startup recovery
-│   │   └── dedup.py            # Reading deduplication
-│   │                           #   - In-memory set of (device_id, reading_type, timestamp)
-│   │                           #   - Sliding window TTL (default 7 days)
+│   │   ├── dedup.py            # Deduplication cache (device_id, reading_type, timestamp)
+│   │   └── disk_cache.py       # Generic JSON disk cache for adapter state
 │   │
 │   ├── ids/
-│   │   └── reading_id.py       # Content-based reading ID generation
-│   │                           #   SHA-256 of: device_id|sensor_timestamp|reading_type|value
+│   │   └── reading_id.py       # SHA-256 content-based reading ID
 │   │
 │   ├── signing/
-│   │   └── ed25519.py          # Ed25519 reading signing
-│   │                           #   - Auto-generates key pair on first run
-│   │                           #   - Signs canonical JSON payload
-│   │                           #   - ingester_id derived from public key
+│   │   ├── keys.py             # IngesterKeyManager — Ed25519 key lifecycle
+│   │   ├── signer.py           # ReadingSigner — signs canonical JSON
+│   │   └── trust.py            # TrustStore — verifier trust list
 │   │
-│   ├── mqtt/
-│   │   ├── publisher.py        # Publish normalized readings to WeSense MQTT hub
-│   │   │                       #   Topic: wesense/decoded/{source}/{country}/{subdivision}/{device_id}
-│   │   └── subscriber.py       # Multi-region MQTT subscriber
-│   │                           #   - Configurable region list
-│   │                           #   - Auto-reconnect with backoff
-│   │                           #   - Thread-safe message handling
-│   │                           #   - Per-region statistics
-│   │                           #   - TLS support via configure_mqtt_tls()
+│   ├── registry/
+│   │   ├── config.py           # RegistryConfig — OrbitDB endpoint settings
+│   │   └── client.py           # RegistryClient — node registration + trust sync
+│   │
+│   ├── clickhouse/
+│   │   └── writer.py           # BufferedClickHouseWriter (rarely used directly)
 │   │
 │   └── logging/
-│       └── structured.py       # Colored console + rotating file logs
+│       └── setup.py            # Coloured console + rotating file logs
 │
 ├── pyproject.toml
 └── README.md
 ```
+
+**What adapters import:** the common case is just three symbols:
+
+```python
+from wesense_ingester import ReadingPipeline, Shutdown, setup_logging
+```
+
+Everything else is used via the pipeline — adapters don't instantiate `ReadingSigner`, `GatewayClient`, `WeSensePublisher`, `RegistryClient`, etc. directly. The pipeline builds them from environment variables and exposes only `process()`, `close()`, and a few property accessors.
 
 **Base dependencies:** `cryptography` and `protobuf` are base dependencies of `wesense-ingester-core`. The `[p2p]` extra only contains `eclipse-zenoh` (needed by `wesense-live-transport` only).
 
