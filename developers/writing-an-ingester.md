@@ -133,51 +133,27 @@ Describe what this ingester does, what it connects to,
 and any source-specific quirks.
 """
 
-import json
 import os
 import signal
-import socket
 import time
 
-from wesense_ingester import (
-    DeduplicationCache,
-    ReverseGeocoder,
-    setup_logging,
-)
-from wesense_ingester.gateway.client import GatewayClient
-from wesense_ingester.gateway.config import GatewayConfig
-from wesense_ingester.mqtt.publisher import MQTTPublisherConfig, WeSensePublisher
-from wesense_ingester.signing.keys import IngesterKeyManager, KeyConfig
-from wesense_ingester.signing.signer import ReadingSigner
+from wesense_ingester import ReadingPipeline, setup_logging
+from wesense_ingester.mqtt.publisher import MQTTPublisherConfig
 
-INGESTION_NODE_ID = os.getenv("INGESTION_NODE_ID", socket.gethostname())
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "300"))  # seconds
 
 
 class MyDataIngester:
 
     def __init__(self):
-        # ── Logging ───────────────────────────────────────────��─
         self.logger = setup_logging("mydata_ingester")
 
-        # ── Core pipeline components ────────────────────────────
-        # These are all from wesense-ingester-core. You initialise
-        # them once and call them for every reading.
-
-        self.dedup = DeduplicationCache()
-        self.geocoder = ReverseGeocoder()
-
-        # Storage broker — receives readings via HTTP POST,
-        # writes to ClickHouse and the archive pipeline.
-        self.gateway_client = None
-        try:
-            self.gateway_client = GatewayClient(config=GatewayConfig.from_env())
-        except Exception as e:
-            self.logger.warning("No storage broker: %s (MQTT-only mode)", e)
-
-        # MQTT publisher — publishes decoded readings for the
-        # real-time map (Respiro) and P2P distribution via
-        # the live transport.
+        # One pipeline replaces what used to be 6 separate components:
+        # dedup, geocoder, gateway client, MQTT publisher, key manager,
+        # and signer. The pipeline builds the canonical reading, signs it
+        # once, and sends the identical signed payload to both MQTT and
+        # the storage broker. See the architecture's data-integrity page
+        # for the full Dual-Path Identity Invariant guarantee.
         mqtt_config = MQTTPublisherConfig(
             broker=os.getenv("MQTT_BROKER", "localhost"),
             port=int(os.getenv("MQTT_PORT", "1883")),
@@ -185,20 +161,7 @@ class MyDataIngester:
             password=os.getenv("MQTT_PASSWORD"),
             client_id="mydata_publisher",
         )
-        self.publisher = WeSensePublisher(config=mqtt_config)
-        self.publisher.connect()
-
-        # Ed25519 signing — auto-generates a key pair on first
-        # run. The ingester_id is derived from the public key.
-        key_config = KeyConfig.from_env()
-        self.key_manager = IngesterKeyManager(config=key_config)
-        self.key_manager.load_or_generate()
-        self.signer = ReadingSigner(self.key_manager)
-        self.logger.info(
-            "Ingester ID: %s (key version %d)",
-            self.key_manager.ingester_id,
-            self.key_manager.key_version,
-        )
+        self.pipeline = ReadingPipeline(name="mydata", mqtt_config=mqtt_config)
 
         # ── Your data source setup ──────────────────────────────
         # Initialise your API client, MQTT subscriber, webhook
@@ -207,11 +170,13 @@ class MyDataIngester:
 
         self._running = True
 
-    # ── The core processing pipeline ────────────────────────────
-    # This method is the same shape in every ingester. The only
-    # difference is what fields you can fill in.
+    # ── The only code you write per reading ─────────────────────
+    # Build a flat dict with the reading's fields and hand it to the
+    # pipeline. The pipeline dedups, geocodes (if you didn't), builds
+    # the canonical reading, signs it, publishes to MQTT, and POSTs
+    # to the storage broker — all atomically.
 
-    def process_reading(
+    def on_reading(
         self,
         device_id: str,
         reading_type: str,
@@ -222,85 +187,29 @@ class MyDataIngester:
         lon: float,
         station_name: str = "",
     ) -> None:
-        """Process a single reading through the WeSense pipeline."""
-
-        # 1. Deduplication — skip if we've seen this exact reading
-        if self.dedup.is_duplicate(device_id, reading_type, timestamp):
-            return
-
-        # 2. Geocoding — convert lat/lon to ISO 3166 codes
-        geo = self.geocoder.reverse_geocode(lat, lon)
-        country = geo["geo_country"] if geo else ""
-        subdivision = geo["geo_subdivision"] if geo else ""
-
-        # 3. MQTT publish — for real-time map and P2P distribution.
-        #    Include ALL fields that the storage broker writes to
-        #    ClickHouse, so remote stations get complete data.
-        mqtt_dict = {
-            "timestamp": timestamp,
+        """Hand a reading to the WeSense pipeline."""
+        self.pipeline.process({
             "device_id": device_id,
-            "data_source": "mydata",             # ← your data source ID
+            "timestamp": timestamp,
             "reading_type": reading_type,
-            "value": value,
+            "value": value,                        # See "Determinism" section below
             "unit": unit,
             "latitude": lat,
             "longitude": lon,
-            "geo_country": country,
-            "geo_subdivision": subdivision,
-            "node_name": station_name,
+            "data_source": "mydata",               # ← your data source ID
+            "data_source_name": "My Data",         # ← human-readable
+            "sensor_transport": "",                # first-hop (wifi, lora, lorawan, or "")
             "deployment_type": "OUTDOOR",
-            "board_model": "",
-        }
-        self.publisher.publish_reading(mqtt_dict)
-
-        # 4. Sign — Ed25519 signature over canonical JSON
-        signing_dict = {
-            "device_id": device_id,
-            "data_source": "mydata",
-            "timestamp": timestamp,
-            "reading_type": reading_type,
-            "value": value,
-            "latitude": lat,
-            "longitude": lon,
-            "transport_type": "",
-        }
-        signed = self.signer.sign(
-            json.dumps(signing_dict, sort_keys=True).encode()
-        )
-
-        # 5. Storage broker POST — buffered, auto-flushes
-        if self.gateway_client:
-            self.gateway_client.add({
-                "timestamp": timestamp,
-                "device_id": device_id,
-                "data_source": "mydata",         # ← same as MQTT
-                "data_source_name": "My Data",   # ← human-readable
-                "network_source": "api",
-                "ingestion_node_id": INGESTION_NODE_ID,
-                "reading_type": reading_type,
-                "value": float(value),
-                "unit": unit,
-                "latitude": float(lat),
-                "longitude": float(lon),
-                "altitude": None,
-                "geo_country": country,
-                "geo_subdivision": subdivision,
-                "board_model": "",
-                "sensor_model": "",
-                "calibration_status": "",
-                "deployment_type": "OUTDOOR",
-                "deployment_type_source": "manual",
-                "transport_type": "",
-                "location_source": "manual",
-                "node_name": station_name,
-                "signature": signed.signature.hex(),
-                "ingester_id": self.key_manager.ingester_id,
-                "key_version": self.key_manager.key_version,
-            })
+            "deployment_type_source": "manual",
+            "location_source": "manual",
+            "node_name": station_name,
+            "data_license": "CC-BY-4.0",           # or a source-specific license
+            "network_source": "api",               # operational (not signed)
+        })
 
     # ── Your data source loop ──────────────────────────────────
     # This is where YOUR code goes. Fetch data however your
-    # source provides it, decode it, and call process_reading()
+    # source provides it, decode it, and call on_reading()
     # for each reading.
 
     def poll(self) -> None:
@@ -311,12 +220,12 @@ class MyDataIngester:
         # for station in stations:
         #     readings = my_api.get_readings(station["id"])
         #     for r in readings:
-        #         self.process_reading(
+        #         self.on_reading(
         #             device_id=f"mydata_{station['id']}",
-        #             reading_type=r["type"],   # e.g. "temperature"
-        #             value=r["value"],          # e.g. 22.5
-        #             unit=r["unit"],            # e.g. "°C"
-        #             timestamp=r["timestamp"],  # Unix epoch (int)
+        #             reading_type=r["type"],    # e.g. "temperature"
+        #             value=r["value"],           # e.g. 22.5
+        #             unit=r["unit"],             # e.g. "°C"
+        #             timestamp=r["timestamp"],   # Unix epoch (int)
         #             lat=station["lat"],
         #             lon=station["lon"],
         #             station_name=station["name"],
@@ -345,9 +254,7 @@ class MyDataIngester:
         self._running = False
 
     def shutdown(self) -> None:
-        if self.gateway_client:
-            self.gateway_client.close()
-        self.publisher.close()
+        self.pipeline.close()
         self.logger.info("Shutdown complete.")
 
 
@@ -362,18 +269,22 @@ if __name__ == "__main__":
 
 ### 4. What You Write vs What Core Provides
 
-| Responsibility                      | Who                   | Notes                                                                |
-| ----------------------------------- | --------------------- | -------------------------------------------------------------------- |
-| Connect to data source              | **You**               | MQTT subscribe, HTTP poll, webhook server, etc.                      |
-| Decode raw payload                  | **You**               | JSON, XML, protobuf, CSV — whatever your source sends                |
-| Map fields to standard reading dict | **You**               | `reading_type`, `value`, `unit`, `device_id`, coordinates            |
-| Deduplication                       | Core                  | `DeduplicationCache` — keyed on (device_id, reading_type, timestamp) |
-| Reverse geocoding                   | Core                  | `ReverseGeocoder` — offline GeoNames, lat/lon → ISO 3166 codes       |
-| Ed25519 signing                     | Core                  | `ReadingSigner` — auto-generated keys, canonical JSON signing        |
-| Storage (ClickHouse)                | Core → Storage Broker | `GatewayClient.add()` — buffered HTTP POST to storage broker         |
-| MQTT publish                        | Core                  | `WeSensePublisher.publish_reading()` — topic auto-constructed        |
-| P2P distribution                    | Live Transport        | Automatic — subscribes to MQTT decoded topics, publishes to Zenoh    |
-| Archiving to Parquet                | Storage Broker        | Automatic — archives to distributed blob store on schedule           |
+| Responsibility                      | Who                   | Notes                                                                                        |
+| ----------------------------------- | --------------------- | -------------------------------------------------------------------------------------------- |
+| Connect to data source              | **You**               | MQTT subscribe, HTTP poll, webhook server, etc.                                              |
+| Decode raw payload                  | **You**               | JSON, XML, protobuf, CSV — whatever your source sends                                        |
+| Preprocess values                   | **You**               | Any precision-altering arithmetic (rounding, unit conversion). See "Determinism" below.      |
+| Map fields to standard reading dict | **You**               | `reading_type`, `value`, `unit`, `device_id`, coordinates                                    |
+| Deduplication                       | Core (pipeline)       | In-memory cache keyed on `(device_id, reading_type, timestamp)`                              |
+| Reverse geocoding                   | Core (pipeline)       | Offline GeoNames, lat/lon → ISO 3166 codes                                                   |
+| Build canonical reading             | Core (pipeline)       | Enforces types, applies defaults, produces the exact bytes that get signed                   |
+| Ed25519 signing                     | Core (pipeline)       | Auto-generated keys, signs the canonical bytes, includes `signing_payload_version` in payload |
+| MQTT publish                        | Core (pipeline)       | Same signed payload sent to MQTT for P2P distribution                                        |
+| Storage broker POST                 | Core (pipeline)       | Same signed payload POSTed to storage broker                                                 |
+| P2P distribution                    | Live Transport        | Subscribes to MQTT decoded topics, forwards to Zenoh (preserves original signature)          |
+| Archiving to Parquet                | Storage Broker        | Archives ClickHouse data to the distributed blob store on schedule                           |
+
+The critical design property: **the canonical reading is built once and signed once, and the identical signed payload is sent to both MQTT and the storage broker.** You never need to construct three separate dicts, and the pipeline prevents you from doing so accidentally. This guarantees that a reading archived by the originating station and a reading archived by a remote station (that received it via live P2P) produce byte-identical Parquet rows. See [Data Integrity](/architecture/data-integrity) for the full Dual-Path Identity Invariant specification.
 
 ### 5. The Standard Reading Dict
 
@@ -419,6 +330,45 @@ Every reading you produce must include these fields:
 | `so2`            | µg/m³  | Sulphur dioxide               |
 
 See the [Data Schema Reference](/developers/data-schema) for the full table including particle bin counts, raw sensor values, and other types.
+
+## Determinism — Why This Matters
+
+WeSense stores readings in content-addressed archives. Two stations that both receive the same reading must produce byte-identical Parquet blobs, or the network stores the same data twice under different hashes. At a million nodes this would be catastrophic — it's the single invariant that must not break.
+
+The pipeline handles most of this for you. But there are a few rules you must follow when writing an ingester.
+
+### The Rules for Ingester Authors
+
+**1. Don't modify values inside the reading dict "just before" calling `pipeline.process()`.**
+
+If you round, truncate, or unit-convert a value, do it at the point where you decode the raw sensor data — then pass the result to the pipeline unchanged. Two ingesters handling the same sensor must apply identical preprocessing. The pipeline does not normalise numeric values; whatever you pass is what gets signed.
+
+**2. If you round, document and publish the rounding rules.**
+
+The WeSense LoRa ingester rounds sensor values to a fixed number of decimal places (temperature to 2dp, PM2.5 to 1dp, CO₂ to integer, etc.) because LoRaWAN bandwidth is limited and higher precision isn't meaningful. The rules live in a `READING_DECIMALS` table in that ingester. Any other implementation of the same sensor decoder — including ports to other languages — must apply the same rounding. Python's `round()` uses banker's rounding (round half to even); if you port to Rust or Go, use the same semantics.
+
+**3. Don't duplicate an existing ingester in a different language unless you can prove byte-identical output.**
+
+If a Python ingester for the `WeSense-compatible sensor X` already exists, and you write a Rust ingester for the same sensor type, both ingesters processing the same physical reading MUST produce byte-identical canonical bytes. Otherwise their archives diverge and the invariant breaks. Write a regression test that feeds known sensor inputs through both implementations and compares the output of `canonical_to_json()`.
+
+**4. You CAN add an ingester for a new sensor type in any language.**
+
+If no other ingester handles the sensor type, there's no collision risk. Your canonical bytes are the only ones that exist for that data. Just follow the general contract:
+
+- `timestamp` is always int Unix seconds from the sensor
+- String fields are always strings (empty string `""` for absent, never `null`)
+- `latitude`, `longitude`, `altitude` are floats or `null`, never strings
+- `value` is always a float, never null
+
+**5. The pipeline signs what you pass.**
+
+The signature covers every field in the canonical reading. If you later discover a bug where an ingester was passing the wrong value for a field, you cannot retroactively fix the signature — the signed payload is what it is. Fix the bug, deploy, and new readings will be correct. Old readings stay as they are (content-addressed immutability).
+
+### Why We Don't Just Normalise in the Pipeline
+
+Normalising numbers in the pipeline (e.g., forcing a global rounding rule) would solve the determinism problem at the cost of losing information. A temperature sensor accurate to 3 decimal places would be silently truncated. Instead, the pipeline trusts the ingester to preprocess appropriately, and the determinism contract keeps the system honest.
+
+For the full formal contract (JSON serialisation rules, cross-language requirements, frozen canonical schema versions), see [Data Integrity](/architecture/data-integrity) §"Canonical Determinism Contract".
 
 ## Connection Patterns
 
