@@ -58,7 +58,7 @@ Fields NOT in the canonical reading (operational metadata that varies by station
 - `network_source` — whether received locally or via P2P
 - `ingestion_node_id` — which station processed it
 - `received_via` — local or p2p
-- `signature`, `ingester_id`, `key_version` — these travel alongside the canonical reading but are not part of it (the signature signs the canonical reading, not itself)
+- `signature`, `ingester_id`, `key_version`, `public_key` — these travel alongside the canonical reading but are not part of it. The signature signs the canonical reading; the public key is the verification counterpart to the signing private key and travels with every row so archives are self-contained (see [Governance & Trust](./governance-and-trust) §"Trust Retention — Two Distinct Concerns").
 
 ### Canonical Determinism Contract
 
@@ -243,6 +243,7 @@ Once all pieces are in place, `docker compose pull && docker compose restart` on
 | 005 | `data_license` | Per-reading license tracking (default CC-BY-4.0) |
 | 006 | `reading_type_name` | Human-readable reading type labels (e.g. PM2.5 for pm2_5) |
 | 007 | `signing_payload_version` | Which version of the canonical schema was signed (future-proofs signature verification) |
+| 008 | `public_key` | Ed25519 public key used for signing — stored per row so archives are self-contained without an external trust store |
 
 ### Archive Schema Versioning
 
