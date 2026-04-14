@@ -284,6 +284,8 @@ Both fields are in the Ed25519 signing payload. Changing values requires a **sig
 | `reading_type`        | `reading_type_name` | `unit`     | Description                           |
 | --------------------- | ------------------- | ---------- | ------------------------------------- |
 | `temperature`         | Temperature         | °C         | Air temperature                       |
+| `temperature_5m`      | Temperature (5m)    | °C         | Air temperature at 5m height (tower)  |
+| `temperature_6m`      | Temperature (6m)    | °C         | Air temperature at 6m height (tower)  |
 | `humidity`            | Humidity            | %          | Relative humidity                     |
 | `pressure`            | Pressure            | hPa        | Barometric pressure                   |
 | `co2`                 | CO₂                 | ppm        | Carbon dioxide concentration          |
@@ -294,6 +296,7 @@ Both fields are in the Ed25519 signing payload. Changing values requires a **sig
 | `nox_index`           | NOx Index           | index      | NOx air quality index (1-500)         |
 | `voc_raw`             | VOC Raw             | Ω          | Raw VOC sensor resistance             |
 | `nox_raw`             | NOx Raw             | Ω          | Raw NOx sensor resistance             |
+| `gas_resistance`      | Gas Resistance      | Ω          | Raw gas sensor resistance (BME680 etc.) |
 | `particles_0_3um`     | Particles (>0.3µm)  | count/0.1L | Particle count per 0.1L in >0.3µm bin |
 | `particles_0_5um`     | Particles (>0.5µm)  | count/0.1L | Particle count per 0.1L in >0.5µm bin |
 | `particles_1_0um`     | Particles (>1.0µm)  | count/0.1L | Particle count per 0.1L in >1.0µm bin |
