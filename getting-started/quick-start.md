@@ -2,7 +2,29 @@
 
 There are several ways to contribute sensor data to WeSense. The right path depends on what you already have.
 
-<!-- IMAGE: /images/diagrams/quick-start-flowchart.svg — Decision flowchart: "Do you have existing sensors?" → Yes → MQTT/HA. No → "Do you have WiFi at the sensor location?" → Yes → Build a WeSense Node. No → "LoRaWAN gateway in range?" → Yes → LoRaWAN. No → Meshtastic -->
+## How the pieces fit together
+
+Before the decision tree, a quick orientation. WeSense has a handful of moving parts — knowing what each one does will make the rest of these docs much easier to navigate.
+
+```mermaid
+flowchart LR
+    SN[Sensor Node] -->|readings| MB[MQTT Broker]
+    MB --> ST[Station]
+    ST <-.->|P2P| OST[Other Stations]
+
+    BS[Bootstrap Node]
+    BS -.->|helps discovery| ST
+    BS -.->|helps discovery| OST
+
+    style BS stroke-dasharray: 5 5
+```
+
+- **Sensor Node** — the device that actually reads the environment. Could be a WeSense-flashed ESP32 board, a Meshtastic device with sensors attached, or an existing system you already own (Ecowitt weather station, Home Assistant, etc.).
+- **MQTT Broker** — where sensor nodes send their readings. By default this is `mqtt.wesense.earth`, run by the WeSense project. You can also run your own if you want a local entry point.
+- **Station** — a computer somewhere that receives readings, decodes and geocodes them, stores them in a database, shows them on a map, and optionally archives and replicates them across the P2P network. Stations come in a few shapes depending on how much you want to run — see the table below.
+- **Bootstrap Node** — a side role, not required. It's a publicly-reachable peer that helps new stations find existing ones faster when they first come online. Stations can discover each other without a bootstrap (via mDNS on a LAN, or the P2P network's own discovery), but a well-known bootstrap speeds things up — especially across the internet.
+
+The terminology can be fuzzy because a single physical computer often plays more than one role. One Raspberry Pi at your house might be a "station" *and* an "MQTT broker" *and* a "bootstrap node" all at once. The separation is about **responsibilities**, not about separate hardware.
 
 ## I already have sensors
 
