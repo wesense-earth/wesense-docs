@@ -10,6 +10,89 @@ Two independent P2P networks, each serving a distinct purpose:
   
   > **Why is OrbitDB separate from the storage broker?** They serve fundamentally different purposes. Helia/libp2p on port 4002 forms a **private WeSense network** for OrbitDB state synchronization — only WeSense stations connect, no public infrastructure involved. The storage broker on port 8080 + archive replicator on port 4400 handle archive storage and HTTP serving. OrbitDB does not store archive content. The storage broker does not manage trust or node registry. They are independent systems.
 
+## Node Discovery & State Synchronisation (OrbitDB)
+
+This section explains how the OrbitDB/libp2p network discovers peers, decides who to talk to, and keeps state consistent across the network — including at very large scale.
+
+Live sensor data does **not** flow through this layer — that's Zenoh. Archive replication does **not** flow through this layer — that's the archive replicator over iroh. OrbitDB handles only the small shared state the network needs to operate: the node registry and the trust list.
+
+### The three layers of the P2P stack
+
+OrbitDB sits on top of Helia (js-libp2p with no public IPFS connections). Three conceptually separate things happen:
+
+1. **Discovery — finding out that a peer exists and where to reach it.**
+   - **mDNS** on a LAN finds other WeSense stations on the same subnet automatically.
+   - **Bootstrap peer list** (`ORBITDB_BOOTSTRAP_PEERS`) — a small seed list of stations to dial at startup to get into the network.
+   - **`wesense.nodes` OrbitDB database** — the canonical registry of every station in the network. Once a station has synced this database (via CRDT replication from any connected peer), it knows every other station's peer ID and `ANNOUNCE_ADDRESS`. This is WeSense's primary peer-discovery mechanism.
+
+2. **Connection — establishing a libp2p session to a specific peer.** Direct QUIC/TCP wherever possible. For stations behind strict NAT, DCUtR hole-punching can coordinate a direct connection via a mutually-reachable third party (hole-punching only, not a traffic relay). Stations that can't be directly reached even with DCUtR are not full P2P participants — they should use the public MQTT contributor path instead. See [NAT Traversal](#nat-traversal-for-direct-station-to-station-connections) for the roadmap and the architectural decision not to run circuit-relay v2 as a proxy.
+
+3. **GossipSub mesh — the set of peers you actually exchange messages with.** Each station maintains a **mesh** of `D` direct peers per topic (libp2p default `D=6`). Messages flood through the mesh with deduplication by message ID. Peers outside the mesh are known but not directly gossiped with — they're eligible to join the mesh if current members become unreliable.
+
+### WeSense-native peer discovery: event-driven dialer
+
+Standard libp2p discovery mechanisms have limits:
+
+- **mDNS** is LAN-only.
+- **Bootstrap list** is manual; requires every operator to know about every other station, which doesn't scale.
+- **GossipSub Peer Exchange (PX)** propagates peer records in PRUNE messages — but PRUNE only fires when a mesh is over-sized (more than `D_hi=12` peers), which never happens in networks with fewer peers than the mesh target. At small scale, PX is silent. At large scale it works beautifully.
+- **DHT** is the libp2p-native solution for large-scale address lookup, but js-libp2p's DHT is limited (TCP-only, small routing tables) and not the primary mechanism here.
+
+WeSense's native mechanism — which works at any scale from three stations to millions — uses the `wesense.nodes` OrbitDB database directly:
+
+1. **Every station registers itself** in `wesense.nodes` with its peer ID, `ANNOUNCE_ADDRESS`, role, and scope.
+2. **OrbitDB CRDT replication** propagates the registry to every station automatically. Connect to any single peer and you converge on the full registry within seconds.
+3. **The event-driven dialer** on each station subscribes to `wesense.nodes` update events. When a new record appears (or an existing one changes), the station checks: is this me? am I already connected? is this peer penalised? If none of those apply, it dials the new peer directly.
+4. **Bootstrap's role reduces to a pure seed.** A new station only needs one reachable peer in `ORBITDB_BOOTSTRAP_PEERS` to cold-start. Once the initial connection is established and `wesense.nodes` has synced, every subsequent peer dial is driven by registry updates.
+
+This design has several properties worth noting:
+
+- **Single source of truth.** The registry drives who we dial. No parallel peer-list state to keep in sync with the network reality.
+- **Push-driven, not polled.** OrbitDB's update events mean new peers are dialed within seconds of their registration propagating — no discovery delay.
+- **Compatible with GossipSub PX.** When the mesh gets big enough that PRUNE fires regularly, PX works as an additional propagation channel. It's additive, not alternative.
+- **Extensible to trust/quality scoring.** The dial decision includes an `isPenalised()` check — initially a no-op, but a natural hook for the future prioritisation framework (see [Phase 2 Plan §4.4](https://github.com/wesense-earth/wesense-general-docs/blob/main/general/Phase2Plan.md)).
+
+Bootstrap stations that advertise themselves in `wesense.nodes` are no different from any other station in this model. The `ORBITDB_BOOTSTRAP_PEERS` env var becomes a cold-start seed list, not a runtime peer list. The network stops depending on any specific bootstrap being up once `wesense.nodes` has propagated.
+
+### How this scales to millions of stations
+
+The key property is that **gossipsub mesh size is constant regardless of network size.** Each station talks directly to ~6 peers, no matter if the network has 10 stations or 10 million. Messages reach every subscriber in roughly log<sub>D</sub>(N) hops — ~9 hops for a million stations at `D=6`, ~11 hops for ten million. Each station processes only its mesh neighbours' traffic, not the whole network's.
+
+Three further properties make this scale cleanly:
+
+- **Topic sharding.** A single gossipsub topic subscribed to by a million stations is unworkable traffic. WeSense topics are partitioned by region and purpose — e.g. a guardian in New Zealand subscribes to `nz/*` topics but not `de/*`, and each topic has its own mesh. Each station participates in only the meshes it cares about. See the [Scale & Partitioning](/architecture/scale-and-partitioning) architecture doc for the sharding model.
+- **Registry sharding.** At very large scale, every station holding the full global `wesense.nodes` registry becomes impractical. The registry will shard the same way topics do — a station stores/replicates the registry entries for regions it cares about, plus a small set of cross-region bootstrap seeds. This is future work.
+- **Eventually-consistent state, not authoritative data.** The data OrbitDB carries is **CRDT-based** — every peer holds a full replica of the registry (scoped appropriately at scale), and replicas merge cleanly without needing a single authoritative source. There is no "which peer has the most up-to-date data" question to resolve at the peer-selection layer — all peers converge on the same state, so any peer is a valid source. See the [Governance & Trust](/architecture/governance-and-trust) page for what that state looks like.
+
+In short: at scale you don't "choose one peer out of a million to talk to." You maintain a stable gossipsub mesh of a handful of peers (chosen by gossipsub's own scoring), the registry-driven dialer keeps you connected to a broader set of known-good stations you've discovered via the shared registry, and the gossip tree handles network-wide reach. State consistency is handled above the peer layer by CRDTs.
+
+### Current deployment status and roadmap
+
+- ✅ **`ORBITDB_BOOTSTRAP_PEERS` seed** — implemented. Supports comma-separated list of multiaddrs / hostnames.
+- ✅ **mDNS on LAN** — implemented via `@libp2p/mdns`.
+- ✅ **`wesense.nodes` registry** — implemented; every station registers and replicates.
+- ✅ **GossipSub Peer Exchange (doPX)** — enabled. Active at large-network scale where PRUNE fires; quiet at our current small scale.
+- 🚧 **Event-driven dialer from `wesense.nodes` updates** — in progress. This is the WeSense-native peer discovery that replaces manual peer-list maintenance.
+- 🧭 **Trust / quality prioritisation framework** — designed as a future hook on the event-driven dialer. See Phase 2 Plan §4.4.
+- 🧭 **DCUtR hole-punching for strict-NAT stations** — deferred; lower priority than the registry-based dialer.
+- ❌ **Circuit-relay v2 as traffic proxy** — deliberately rejected. Stations that cannot be directly reached do not get proxied through relays; they participate as contributors via public MQTT instead. See the NAT Traversal section below and Phase 2 Plan §4.4 for the decision rationale.
+
+### OrbitDB specifically
+
+[OrbitDB](https://github.com/orbitdb/orbitdb) is a peer-to-peer database that sits on top of libp2p and IPFS-compatible blockstores. It provides CRDT-based data types (KeyValue, EventLog, Documents, etc.) where every peer holds a full local replica and replicas converge on the same state via delta propagation over gossipsub.
+
+WeSense uses OrbitDB for three small, shared states:
+
+- `wesense.nodes` — the node registry. Who's on the network, what roles they play, what addresses they advertise.
+- `wesense.trust` — the trust list. Ed25519 public keys that are authorised to sign readings.
+- `wesense.attestations` — historical archive integrity proofs. (Being phased out in favour of the iroh archive replicator's index-as-a-blob mechanism — see below.)
+
+These databases are small, bounded, and rarely written to. OrbitDB is well-suited for this: full replication is cheap, and CRDT convergence means operators don't have to worry about partitions, split-brain, or consensus.
+
+**We run a forked OrbitDB.** The upstream project has an open issue around oplog entries with unresolvable block references — "poison" entries that cause every peer to repeatedly retry block fetches that will never succeed. In a long-lived network, these accumulate and become a chronic source of log noise, wasted bandwidth, and memory pressure. The WeSense fork adds a TTL to old problematic records so they age out instead of replicating forever. A pull request against upstream OrbitDB is in progress; once accepted, we'll migrate back to the mainline project. The fork lives in the `orbitdb-fork` repo in the WeSense organisation.
+
+For general background on OrbitDB's architecture, CRDTs, and access-control primitives, see the [OrbitDB project](https://github.com/orbitdb/orbitdb) directly — that material is well-documented upstream and not reproduced here.
+
 ## Distribution Layer
 
 **Status:** Implemented. Iroh selected as the archive distribution backend.

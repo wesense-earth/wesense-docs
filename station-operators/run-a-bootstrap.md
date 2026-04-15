@@ -19,7 +19,7 @@ That's it. There's no special code-path for "being a bootstrap" — it's just a 
 
 ## Is it required?
 
-**No.** The WeSense P2P network is designed to function without any dedicated bootstrap — stations can find each other via mDNS on a LAN, or via the DHT across the internet. A bootstrap just accelerates initial discovery, especially across the WAN, and is particularly helpful for contributors behind NAT who can't accept inbound connections themselves.
+**No.** The WeSense P2P network is designed to function without any dedicated bootstrap — stations can find each other via mDNS on a LAN, via peer exchange through any connected peer, or via the DHT across the internet. A bootstrap just accelerates initial discovery, especially across the WAN, and is particularly helpful for stations behind strict NAT who can't accept inbound connections themselves.
 
 The network should always have at least one reachable bootstrap for good user experience, but it does not depend on any specific one being up.
 

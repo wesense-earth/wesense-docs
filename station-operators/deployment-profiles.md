@@ -10,7 +10,6 @@ WeSense uses Docker Compose profiles to let you run exactly the components you n
 | `guardian` | EMQX + ClickHouse + Ingesters + Respiro + P2P + OrbitDB | The full stack. Stores, serves, and replicates data for a region. The most valuable station type for the network. |
 | `hub` | EMQX broker + OrbitDB | Operates a public MQTT entry point for sensors in a region |
 | `bootstrap` | OrbitDB only | A publicly-reachable P2P peer that helps new stations find existing ones. A lightweight side role. |
-| `observer` | ClickHouse + Respiro (receive-only) | Read-only map / data viewer; receives data via P2P from guardians |
 
 ## Add-on Profiles
 
