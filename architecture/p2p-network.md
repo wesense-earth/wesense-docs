@@ -146,6 +146,70 @@ Without layer 3: local storage grows unboundedly with all-time history, even aft
 
 At 4 stations only layer 0 matters in practice. At 1M stations all four are needed.
 
+#### Block-level fetch backoff
+
+Sitting below layer 0 is a per-block failure cache in `wesense-orbitdb/src/helia-compat.js`. When a specific block fetch fails, that CID is tracked with its timestamp and attempt counter:
+
+- **Short-term cooldown** (15 minutes): after each failure, further fetches of the same CID throw immediately without hitting the network. Protects against retry storms when the same unreachable block is encountered repeatedly by different code paths.
+- **Long-term blacklist** (after 3 failed cooldown cycles): the CID is moved to a persisted blacklist stored at `DATA_DIR/orbitdb/block-blacklist.json`. Fetches throw instantly. Survives restart.
+- **Blacklist TTL** (default 30 days, configurable via `BLOCK_BLACKLIST_TTL_DAYS`): blacklisted entries expire after the TTL and become retryable again. An hourly sweep removes expired entries; expired entries are also removed from the in-memory map on startup via `loadBlacklist()`.
+
+The TTL is not optional UX polish — it's a correctness requirement. In a system where peers can legitimately be offline for extended periods (hardware swaps, long vacations, ISP outages, storage migrations), "permanently blacklisted" is wrong. A block we couldn't fetch today might be fetchable next week when its holder comes back. The TTL strikes a balance: blocks stay blacklisted long enough to avoid repeated futile fetches, but short enough that recovery is possible.
+
+30 days matches the oplog TTL in the WeSense OrbitDB fork. An oplog entry older than that gets filtered at read time anyway, so a blacklist entry older than that can't protect anything useful. Longer would waste memory without adding value.
+
+Manually-blacklisted entries (via `manuallyBlacklist()`) are exempt from TTL — they represent an administrative decision to permanently exclude a block, not a cached failure.
+
+Set `BLOCK_BLACKLIST_TTL_DAYS=0` to disable TTL entirely (entries never expire). Useful for testing or operators who want the pre-TTL semantics.
+
+#### Log-noise filter
+
+Some OrbitDB internal code paths (p-queue task rejections, sync module event emitters) log errors via `console.error(err)` directly — bypassing both `process.on('unhandledRejection')` and `process.on('uncaughtException')` handlers. For errors we've already classified as transient and well-handled elsewhere (orphan-block fetches, stream resets, blacklist hits), this produces pages of redundant stack traces with no diagnostic value.
+
+`wesense-orbitdb` installs a guarded `console.error` wrapper at startup. If any argument's message/stack/string matches a pattern in `KNOWN_SYNC_ERRORS`, the log collapses to a single-line `OrbitDB sync error (intercepted, non-fatal): …` warning. Unrecognised errors pass through unchanged — we don't hide anything we haven't explicitly classified as safe to collapse.
+
+Current filter patterns:
+- `CBOR decode error`, `Failed to load block`, `LoadBlockFailedError`
+- `Want was aborted`, `The operation was aborted`
+- `stream has been reset`, `stream closed`, `Unexpected EOF`
+- `connection reset by peer`, `ECONNRESET`
+- `permanently blacklisted`, `unreachable (attempt` (from the helia-compat blacklist cache)
+
+All are transient — the system recovers automatically on next peer connection or sync cycle. The filter is purely about log hygiene, not behaviour change.
+
+---
+
+### Stream lifecycle and the reset problem
+
+An ongoing known limitation: gossipsub outbound streams between OrbitDB peers sometimes get reset remotely mid-flight (`YamuxStream.onRemoteReset`), producing a cascade of "Cannot write to a stream that is closed" sync errors, a brief disconnect, and an immediate reconnect. The system recovers cleanly — we have a zombie-stream sweep that cleans up post-reset state — but the churn causes:
+
+- Temporary sync interruption until the new stream is established (seconds)
+- Memory churn on the side that keeps re-dialling (historically a leak; now bounded by `ORBITDB_HEAP_MB`)
+- Log noise (now mostly filtered)
+
+**What we know:**
+- The remote peer's yamux initiates the reset (we're the receiver via `onRemoteReset`)
+- It happens regularly, roughly every few minutes, across both the $2 IONOS bootstrap and the Contabo-Germany bootstrap — ruling out specific host environments as the cause
+- All our patches (iteration tolerance, zombie sweep, presence-aware cleanup, heap cap) keep the network functional *despite* the resets
+
+**What we don't know:**
+- Whether the remote's yamux is timing out streams it considers idle
+- Whether gossipsub's own mesh prune/graft dynamics are triggering it
+- Whether a middlebox in the path (NAT, ISP stateful firewall) is pruning the TCP connection after some idle threshold and the RESET is a symptom of that
+
+**Current mitigation:**
+Yamux is configured with `enableKeepAlive: true` and `keepAliveInterval: 10_000` (10 seconds — lowered from the default 30s). Keep-alives are single PING frames; they don't carry payload but they do provide regular yamux-level activity that should defeat most idle-timeout-based middleboxes. If the resets are coming from the remote yamux itself (not the network path), this won't help; but it costs almost nothing to have on.
+
+**Proper fix:**
+Needs local reproduction with packet capture to distinguish between:
+1. Remote-initiated reset (yamux code on the other side decided to)
+2. Middlebox-initiated reset (a NAT/firewall in between severed the TCP connection, and yamux is reflecting that as a stream reset)
+3. Some interaction with our libp2p-stream-compat shim on the sending side
+
+Until that investigation happens, the reset behaviour is accepted as known-and-handled: functional impact is zero, log impact is minimal after the filter, performance impact is "sync pauses for a few seconds every few minutes".
+
+Captured as a deferred investigation item in [Phase 2 Plan §4.4](https://github.com/wesense-earth/wesense-general-docs/blob/main/general/Phase2Plan.md) under "libp2p-stream-compat investigation".
+
 ---
 
 ### Registry maintenance
