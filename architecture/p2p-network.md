@@ -133,10 +133,21 @@ The combination (traverse + heads + traverseAndVerify) means both read and write
 ```
 [orbitdb log /orbitdb/...] entry zdpu... unavailable during traversal: timeout after 2000ms
 [orbitdb oplog-store] head zdpu... unavailable: timeout after 2000ms
-Registry walk: 14 entries | 1 considered | 12 no announce_address | 1 internal (3527ms)
+Registry walk: 14 entries processed | 1 considered | 12 no announce_address | 1 internal (3527ms)
 ```
 
-The registry walk completes; entries that can't be processed are explicitly counted.
+Or, on very poisoned stations where even iteration tolerance's per-entry 2s timeouts add up past the walk's 30s deadline:
+```
+Registry walk: 8 entries processed | 1 considered | 6 no announce_address | 1 internal (30012ms) (partial — deadline 30000ms reached; event-driven path handles the rest)
+```
+
+Partial results are still useful — the peers discovered in the processed subset get dialed; the event-driven dialer catches anything missed once those entries sync in through `update` events. The registry walk's role is to quickly seed the dialer from known local state on startup; it's not the primary discovery mechanism.
+
+##### Registry walk implementation
+
+The walk uses the Documents `iterator()` (lazy yield, entry-at-a-time) rather than `all()` (collects everything before returning). This matters on poisoned stations: iteration yields each healthy entry immediately and skips unreachable ones at 2s each. With `iterator()`, we process each doc as it arrives; with `all()`, we'd wait for the full set to materialise, which can take minutes on heavily-poisoned state.
+
+A soft deadline (`REGISTRY_WALK_TIMEOUT_MS`, 30s) caps the walk's total time. If we hit the deadline mid-iteration, we break cleanly with "partial — deadline reached" in the log line. The `for await` loop over the iterator is cancelled naturally (Node's async iterator protocol calls `return()` on early break, cleaning up the underlying traversal state).
 
 #### Why each layer matters at scale
 
@@ -166,11 +177,24 @@ Manually-blacklisted entries (via `manuallyBlacklist()`) are exempt from TTL —
 
 Set `BLOCK_BLACKLIST_TTL_DAYS=0` to disable TTL entirely (entries never expire). Useful for testing or operators who want the pre-TTL semantics.
 
-#### Log-noise filter
+#### Log-noise filter (windowed first-seen + summary)
 
 Some OrbitDB internal code paths (p-queue task rejections, sync module event emitters) log errors via `console.error(err)` directly — bypassing both `process.on('unhandledRejection')` and `process.on('uncaughtException')` handlers. For errors we've already classified as transient and well-handled elsewhere (orphan-block fetches, stream resets, blacklist hits), this produces pages of redundant stack traces with no diagnostic value.
 
-`wesense-orbitdb` installs a guarded `console.error` wrapper at startup. If any argument's message/stack/string matches a pattern in `KNOWN_SYNC_ERRORS`, the log collapses to a single-line `OrbitDB sync error (intercepted, non-fatal): …` warning. Unrecognised errors pass through unchanged — we don't hide anything we haven't explicitly classified as safe to collapse.
+`wesense-orbitdb` installs a guarded `console.error` wrapper at startup with a **windowed first-seen + summary** policy. The goal is to keep logs readable without ever blinding operators to novel failures that happen to match a filter pattern.
+
+Policy per 5-minute window:
+
+- **First occurrence of a pattern in the window** → logs as `OrbitDB sync error (first in window, non-fatal): <msg>`. An operator sees an example of every pattern that fired.
+- **Subsequent occurrences of the same pattern in the same window** → silent, but counted.
+- **End of window** → if any patterns fired, emits a summary line:
+  ```
+  OrbitDB sync error summary (last 300s): "permanently blacklisted"=23, "stream has been reset"=4, "Cannot write to a stream that is closed"=12
+  ```
+  Operators see both the example (first-in-window) AND the frequency (summary) for every matched pattern.
+- **Unrecognised errors** → always pass through unchanged to the original `console.error`. If a novel failure mode emerges that doesn't match an existing pattern, it prints in full.
+
+Why this matters: if a future bug produces error text that happens to contain "stream has been reset" or "permanently blacklisted", a blanket-suppression filter would hide it indistinguishably from working recoveries. The first-in-window signal ensures an example always prints; the summary provides the frequency data that lets an operator notice if the rate changes.
 
 Current filter patterns:
 - `CBOR decode error`, `Failed to load block`, `LoadBlockFailedError`
