@@ -66,32 +66,222 @@ Three further properties make this scale cleanly:
 
 In short: at scale you don't "choose one peer out of a million to talk to." You maintain a stable gossipsub mesh of a handful of peers (chosen by gossipsub's own scoring), the registry-driven dialer keeps you connected to a broader set of known-good stations you've discovered via the shared registry, and the gossip tree handles network-wide reach. State consistency is handled above the peer layer by CRDTs.
 
-### Current deployment status and roadmap
+### Current deployment status
 
-- ✅ **`ORBITDB_BOOTSTRAP_PEERS` seed** — implemented. Supports comma-separated list of multiaddrs / hostnames.
-- ✅ **mDNS on LAN** — implemented via `@libp2p/mdns`.
-- ✅ **`wesense.nodes` registry** — implemented; every station registers and replicates.
+- ✅ **`ORBITDB_BOOTSTRAP_PEERS` seed** — supports comma-separated list of multiaddrs / hostnames; used only for cold-start.
+- ✅ **mDNS on LAN** — `@libp2p/mdns` for automatic same-subnet discovery.
+- ✅ **`wesense.nodes` registry** — every station's OrbitDB peer self-registers on startup with its `announce_address` and libp2p peer ID.
 - ✅ **GossipSub Peer Exchange (doPX)** — enabled. Active at large-network scale where PRUNE fires; quiet at our current small scale.
-- 🚧 **Event-driven dialer from `wesense.nodes` updates** — in progress. This is the WeSense-native peer discovery that replaces manual peer-list maintenance.
-- 🧭 **Trust / quality prioritisation framework** — designed as a future hook on the event-driven dialer. See Phase 2 Plan §4.4.
+- ✅ **Event-driven dialer from `wesense.nodes` updates** — subscribes to OrbitDB update events; dials any newly-announced peer that isn't ourselves and isn't already connected.
+- ✅ **Iteration tolerance for orphan blocks** — see "Resilience at scale" below.
+- ✅ **Network-presence-aware registry cleanup** — see "Registry maintenance" below.
+- 🧭 **Trust / quality prioritisation framework** — designed as a future hook on the event-driven dialer. See [Phase 2 Plan §4.4](https://github.com/wesense-earth/wesense-general-docs/blob/main/general/Phase2Plan.md).
+- 🧭 **Sync-time availability check** — prevents poison-entry replication. See "Resilience at scale" below for the layered model and where this fits.
 - 🧭 **DCUtR hole-punching for strict-NAT stations** — deferred; lower priority than the registry-based dialer.
-- ❌ **Circuit-relay v2 as traffic proxy** — deliberately rejected. Stations that cannot be directly reached do not get proxied through relays; they participate as contributors via public MQTT instead. See the NAT Traversal section below and Phase 2 Plan §4.4 for the decision rationale.
+- ❌ **Circuit-relay v2 as traffic proxy** — deliberately rejected. Stations that cannot be directly reached do not get proxied through relays; they participate as contributors via public MQTT instead.
 
-### OrbitDB specifically
+---
+
+### Resilience at scale: handling unfetchable references
+
+This is one of the harder problems for any content-addressed P2P data store, and worth understanding in detail because the way we handle it determines whether the network stays operable at large scale.
+
+#### The underlying problem
+
+OrbitDB stores its oplog as a Merkle DAG. Each entry references its parent entries via cryptographic hashes (CIDs). Verifying or iterating the oplog requires fetching the bytes at each referenced CID — either from local disk (if we have it) or from peers via libp2p bitswap (if we don't).
+
+This works perfectly when every CID a peer advertises is fetchable from somewhere. It breaks when **a peer advertises an entry whose referenced CID is not retrievable from anywhere on the network**. We call these "orphan blocks" or "poison entries".
+
+Causes of orphan blocks include:
+- A peer wrote an entry, then went offline before any other peer synced the referenced block from it
+- A peer's storage was wiped or its data corrupted
+- Past bugs caused entries to be written without their referenced blocks being properly stored (the original WeSense incident: a now-fixed helia v6 streaming-blockstore incompatibility produced entries that referenced blocks no peer ever had)
+- Network partitions during sync left receiving peers with partial state
+
+In a small lab network this is a one-time corruption event. **At million-node scale it is baseline behaviour** — the rate of "peer goes offline before its blocks propagate" is non-zero and cumulative. A system that treats unfetchable references as a catastrophic failure breaks continuously at scale; one that treats them as a normal degraded state stays operable.
+
+The TTL fork addresses the LONG-TERM accumulation (entries older than 30 days get filtered out at read time), but does nothing for entries that are orphaned mid-flight. And once a poisoned peer syncs to a clean peer, the clean peer inherits the poison and starts presenting the same problem to whoever syncs next. Without further protection, **the contagion is permanent**.
+
+#### Four-layer architecture
+
+A network that handles this gracefully needs four complementary layers, each addressing a different failure mode. We've shipped some, others are planned. All four documented for posterity in [Phase 2 Plan §4.4](https://github.com/wesense-earth/wesense-general-docs/blob/main/general/Phase2Plan.md).
+
+| Layer | Purpose | WeSense status |
+|---|---|---|
+| **0. Iteration tolerance** | Skip entries whose blocks can't be fetched within a short timeout, log a warning, return what's available. Iteration completes with partial results instead of hanging. | ✅ Shipped |
+| **1. Sync-time availability check** | Reject incoming entries during peer sync if the sender can't produce the referenced blocks. Stops poison from spreading. | 🧭 Planned |
+| **2. Trust / quality prioritisation** | Score peers by how often they advertise unresolvable references; deprioritise or quarantine repeat offenders. | 🧭 Planned (designed) |
+| **3. Local oplog self-cleanup** | Periodically tombstone entries whose referenced blocks have been confirmed unfetchable. Bounds local state regardless of network history. | 🧭 Planned |
+
+#### Layer 0 in depth — iteration tolerance (shipped)
+
+Implemented in the WeSense OrbitDB fork. Two specific code paths were patched, both in `src/oplog/`:
+
+**`traverse()` in `log.js`** is the workhorse function that walks the oplog DAG to enumerate entries. It's called by `iterator()` which is called by the Documents `all()` method which is called by every read endpoint (`GET /nodes`, `GET /trust`, our registry-driven dialer's startup walk). Patched to wrap each entry fetch in a 2-second timeout via `safeFetchEntry()`. Failed fetches return `null`, which the calling logic filters out before continuing. The traversal completes with whatever entries were fetchable; entries whose blocks are unreachable are logged once (rate-limited per hash) and skipped.
+
+**`heads()` in `oplog-store.js`** is the entry-point function that returns the current "tip" entries of the oplog — the starting points for any traversal. Without tolerance here, a single unfetchable head entry would throw the whole `heads()` call, and `iterator()` would never even start. Patched the same way: each head's block fetch is wrapped in a 2-second timeout via `safeGetHead()`. Heads whose blocks can't be fetched are skipped; traversal proceeds from whatever heads ARE reachable.
+
+The combination means iteration succeeds even when some heads or some intermediate entries reference orphan blocks. The cost is incompleteness — we can't yield an entry whose content we can't decode — but completeness was already impossible. The choice is between "incomplete results" and "no results, indefinite hang". Incomplete is correct.
+
+**Test coverage:** all 562 existing OrbitDB tests pass with the patches in place; no behaviour change for healthy entries.
+
+**Operational signal in logs:**
+```
+[orbitdb log /orbitdb/...] entry zdpu... unavailable during traversal: timeout after 2000ms
+[orbitdb oplog-store] head zdpu... unavailable: timeout after 2000ms
+Registry walk: 14 entries | 1 considered | 12 no announce_address | 1 internal (3527ms)
+```
+
+The registry walk completes; entries that can't be processed are explicitly counted.
+
+#### Why each layer matters at scale
+
+Without layer 0: any single bad entry breaks every read, on every station that has it.
+
+Without layer 1: bad entries spread to every clean peer that syncs from a dirty one. Eventually the entire network is dirty.
+
+Without layer 2: each peer wastes resources on repeatedly trying to fetch from sources that have demonstrated they can't help. Bandwidth, CPU, and log volume scale poorly.
+
+Without layer 3: local storage grows unboundedly with all-time history, even after entries become permanently inert.
+
+At 4 stations only layer 0 matters in practice. At 1M stations all four are needed.
+
+---
+
+### Registry maintenance
+
+The `wesense.nodes` registry is the source of truth for "who is on the network and how do I reach them". A few mechanisms keep it healthy.
+
+#### Self-registration
+
+On startup, each `wesense-orbitdb` peer writes its own record to `wesense.nodes` with:
+
+- `_id` and `ingester_id` set to the libp2p peer ID
+- `announce_address` set from the `ANNOUNCE_ADDRESS` env var
+- `type: 'orbitdb-peer'`
+- `updated_at` set to startup time
+
+This is intentionally **once per startup** rather than periodic. The reasoning:
+
+1. Catches changes — a new value of `ANNOUNCE_ADDRESS` takes effect on next restart, which is when the registry should update.
+2. Avoids continuous oplog growth — at 1M peers, hourly re-registration would produce 1M extra oplog entries every hour, all of them carrying no new information.
+
+The trade-off: a peer running continuously past `NODE_TTL_DAYS` would have its registration aged out of the cleanup loop's view, even though the peer is still actively present. The next mechanism addresses this.
+
+#### Presence-aware cleanup
+
+A periodic cleanup loop (`cleanupStaleNodes`, hourly by default) prunes registry entries that we genuinely haven't heard from within `NODE_TTL_DAYS`. "Heard from" means **either**:
+
+1. The entry's own `updated_at` is within the window (the writer has refreshed it), **or**
+2. The entry's `ingester_id` matches a libp2p peer ID we've seen on our network (`peer:connect` event) within the same window.
+
+(2) is tracked in a local in-memory map (`lastSeenPeers`) that records the most recent contact time per peer ID. Updated on every `peer:connect` event. The map is local-only — not replicated — so each station maintains its own view of which peers it has personally observed.
+
+This makes the cleanup semantic match what operators expect: **a peer that's actively present on the network is not pruned from the registry just because it hasn't restarted lately**. The TTL is a "we haven't heard from you in N days" signal, not a "you haven't bothered to re-write your registration" signal.
+
+A peer that genuinely disappears (offline beyond `NODE_TTL_DAYS`, no peer:connect events received) is pruned, as it should be — its entry is no longer useful to anyone.
+
+CRDT semantics make local prunes safe: if station A prunes a peer's entry but station B still sees it, the entry replicates back to A from B. Pruning is a local cleanup, not a network-wide deletion. Network state converges.
+
+#### lastSeenPeers garbage collection
+
+The `lastSeenPeers` Map only ever grows in the absence of explicit cleanup. A peer connected once, then never again, would stay in the Map indefinitely. At million-peer scale over months of process uptime that's substantial memory.
+
+A separate hourly GC sweep removes `lastSeenPeers` entries older than `NODE_TTL_DAYS`. Entries beyond that window are functionally inert — they couldn't keep a registry entry alive (the cleanup loop uses the same cutoff), so removing them changes nothing operationally.
+
+The Map size is therefore bounded to "peers seen in the last N days", not "all peers ever seen". At any scale, memory tracks the active working set rather than cumulative history.
+
+---
+
+### The WeSense OrbitDB fork
 
 [OrbitDB](https://github.com/orbitdb/orbitdb) is a peer-to-peer database that sits on top of libp2p and IPFS-compatible blockstores. It provides CRDT-based data types (KeyValue, EventLog, Documents, etc.) where every peer holds a full local replica and replicas converge on the same state via delta propagation over gossipsub.
 
-WeSense uses OrbitDB for three small, shared states:
+WeSense uses OrbitDB Documents databases for two small, shared states:
 
-- `wesense.nodes` — the node registry. Who's on the network, what roles they play, what addresses they advertise.
-- `wesense.trust` — the trust list. Ed25519 public keys that are authorised to sign readings.
-- `wesense.attestations` — historical archive integrity proofs. (Being phased out in favour of the iroh archive replicator's index-as-a-blob mechanism — see below.)
+- `wesense.nodes` — the node registry. Stations, ingesters, archive replicators all register their endpoints here. Other services read it to discover where to send things.
+- `wesense.trust` — the trust list. Ed25519 public keys that are authorised to sign sensor readings.
 
-These databases are small, bounded, and rarely written to. OrbitDB is well-suited for this: full replication is cheap, and CRDT convergence means operators don't have to worry about partitions, split-brain, or consensus.
+(A previous third database `wesense.attestations` for archive integrity proofs has been retired in favour of the iroh archive replicator's index-as-a-blob mechanism — see the Distribution Layer section below.)
 
-**We run a forked OrbitDB.** The upstream project has an open issue around oplog entries with unresolvable block references — "poison" entries that cause every peer to repeatedly retry block fetches that will never succeed. In a long-lived network, these accumulate and become a chronic source of log noise, wasted bandwidth, and memory pressure. The WeSense fork adds a TTL to old problematic records so they age out instead of replicating forever. A pull request against upstream OrbitDB is in progress; once accepted, we'll migrate back to the mainline project. The fork lives in the `orbitdb-fork` repo in the WeSense organisation.
+OrbitDB is well-suited for these states: they're small, bounded, rarely written to, full replication is cheap, and CRDT convergence means operators don't have to think about partitions, split-brain, or consensus.
 
-For general background on OrbitDB's architecture, CRDTs, and access-control primitives, see the [OrbitDB project](https://github.com/orbitdb/orbitdb) directly — that material is well-documented upstream and not reproduced here.
+#### Why we maintain a fork
+
+WeSense runs a fork of `@orbitdb/core` at [`github.com/wesense-earth/orbitdb`](https://github.com/wesense-earth/orbitdb). The fork carries WeSense-specific patches that aren't (yet) in upstream. We deliberately keep each upstream-PR-able patch on its own focused branch, with an integration branch that production pins to.
+
+##### Branch structure
+
+```
+upstream/main ────────────────────────────────────────
+                 \           \
+                  \           \── feat/ttl ── (TTL + helia v6 compat)
+                   \                                    ↑ submitted as upstream PR
+                    \── feat/iteration-tolerance ── (orphan-block tolerance)
+                                                        ↑ ready for upstream PR
+
+         wesense-main ── (integration: merges all WeSense patches)
+                          ↑ wesense-orbitdb production pins here
+```
+
+**Why an integration branch:** each `feat/*` branch needs to be cleanly upstream-PR-able — reviewers for one shouldn't have to wade through unrelated WeSense patches. So each `feat/*` branch is single-concern, rebased on upstream main where possible. But production needs ALL the patches simultaneously, so `wesense-main` is the union, and `wesense-orbitdb`'s `package.json` pins to it.
+
+When upstream accepts a patch, we drop it from `wesense-main` and rely on the next upstream release. The feature branch can be archived. Over time the divergence shrinks.
+
+##### Patches currently in the fork
+
+**1. TTL support** (`feat/ttl` branch — also includes the helia compat shim that originally shipped with it)
+
+Adds a `ttl` option to `Log()` constructor and a corresponding `isExpired(entry)` filter applied during oplog traversal. Entries older than the TTL are silently skipped during reads. A compact() function reclaims disk by removing expired entries from the blockstore.
+
+The helia v6 streaming-blockstore compatibility patch is bundled in the same branch (a small fix in `IPFSBlockStorage` to handle both the legacy `Promise<Uint8Array>` and the new `AsyncGenerator<Uint8Array>` return types).
+
+Already submitted as upstream PR.
+
+**2. Iteration tolerance** (`feat/iteration-tolerance` branch — based on `feat/ttl` so the TTL-specific paths are also patched)
+
+Adds `safeFetchEntry()` in `src/oplog/log.js` and `safeGetHead()` in `src/oplog/oplog-store.js`. Both are timeout-guarded wrappers around the underlying `get(hash)` call, returning `null` and logging on timeout/failure rather than throwing. Used inside `traverse()` and `heads()` respectively, both at the lowest level where block fetches actually happen.
+
+The patch is purely additive — healthy entries iterate exactly as before, with no behavioural change. Only entries whose blocks can't be fetched in 2 seconds are skipped. All 562 existing tests pass unchanged.
+
+Ready for upstream PR; held pending production validation.
+
+##### Upstream PR strategy
+
+Each fork patch is designed to be upstreamable as a focused improvement to `orbitdb/orbitdb`. We do NOT submit WeSense-specific behaviour upstream — those concerns live in `wesense-orbitdb` (see below). Upstream PRs are sent only for changes that benefit any OrbitDB user, not just WeSense.
+
+Patches we maintain locally and don't intend to upstream (because they're WeSense-specific):
+- Self-registration of orbitdb-peer entries in `wesense.nodes` (lives in `wesense-orbitdb`, not the fork)
+- Network-presence-aware registry cleanup (also `wesense-orbitdb`, not the fork)
+- Anything that depends on `wesense.nodes`'s specific schema
+
+#### `wesense-orbitdb` vs the fork
+
+It's worth being clear about which code lives where:
+
+| Concern | Lives in |
+|---|---|
+| Generic OrbitDB behaviour (databases, oplog, sync, replication) | The fork |
+| Iteration tolerance, heads tolerance, TTL | The fork (upstream-PR-able) |
+| Helia v6 compatibility | The fork (upstream-PR-able) |
+| WeSense database schemas (`wesense.nodes`, `wesense.trust`) | `wesense-orbitdb` |
+| Self-registration on startup | `wesense-orbitdb` |
+| `lastSeenPeers` map and presence-aware cleanup | `wesense-orbitdb` |
+| Registry-driven peer dialer | `wesense-orbitdb` |
+| HTTP API (`/nodes`, `/trust`, `/health`) | `wesense-orbitdb` |
+| Helia/libp2p configuration and lifecycle | `wesense-orbitdb` |
+| Gossipsub stream-zombie sweep | `wesense-orbitdb` |
+
+The fork is the data store; `wesense-orbitdb` is the WeSense-specific service that consumes it.
+
+#### Contributing changes
+
+If you find a bug or want to add a feature:
+
+- **Bugs/features in core OrbitDB** (something any OrbitDB user would want): branch from upstream `main` in `wesense-earth/orbitdb`, develop the change, cherry-pick or merge into `wesense-main` for production, and submit upstream PR from your clean branch when ready.
+- **WeSense-specific behaviour**: live in `wesense-orbitdb`, not the fork. The fork should stay generic.
+
+For background on OrbitDB's architecture, CRDTs, and access-control primitives, see the [OrbitDB project](https://github.com/orbitdb/orbitdb) directly — that material is well-documented upstream and not reproduced here.
 
 ## Distribution Layer
 
