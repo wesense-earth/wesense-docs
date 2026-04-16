@@ -149,6 +149,12 @@ The walk uses the Documents `iterator()` (lazy yield, entry-at-a-time) rather th
 
 A soft deadline (`REGISTRY_WALK_TIMEOUT_MS`, 30s) caps the walk's total time. If we hit the deadline mid-iteration, we break cleanly with "partial — deadline reached" in the log line. The `for await` loop over the iterator is cancelled naturally (Node's async iterator protocol calls `return()` on early break, cleaning up the underlying traversal state).
 
+**The deadline is soft, not hard.** The `for await` loop awaits the next yielded entry before checking the deadline. If the generator takes longer than the deadline to yield its next entry — which happens on heavily-poisoned stations where traversing to the next yield-able entry requires walking through many unfetchable ancestors at 2s each — the actual walk duration can substantially exceed the configured deadline. Observed in production: a .13 station with 73 blacklisted CIDs took 142 seconds to complete a walk whose deadline was 30s.
+
+This is acceptable behaviour. The walk eventually completes with correct results, the deadline is there to prevent true hangs (indefinite bitswap wait), and the extra time is spent productively skipping poison. A hard deadline would require racing `iter.next()` against a timer — implementable, but adds complexity without changing the outcome (the walk either finishes later than ideal, or finishes partially earlier — both are acceptable).
+
+Operators should be aware that on heavily-poisoned stations, walk runtime is roughly `(poison_count × 2s / parallelism)` plus healthy-entry fetch time. At our scale this is measured in minutes, not hours; at much larger scales, tuning `ENTRY_FETCH_TIMEOUT_MS` downward or implementing layer-2 prioritisation (see four-layer architecture above) becomes more relevant.
+
 **Gotcha worth knowing:** the Documents `iterator()` method interprets `{ amount: -1 }` differently from the underlying Log `iterator()`. In Log.js, `amount === -1` means "no limit" and the traversal runs to completion. In Documents.js, the loop does `if (count >= amount) break` with no special-case for `-1`, so `1 >= -1` evaluates true and the iteration terminates after the very first entry. Call `dbs.nodes.iterator()` with **no argument** to get unlimited iteration on Documents. Passing `-1` silently truncates to one entry.
 
 #### Per-hash log throttling
