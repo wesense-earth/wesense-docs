@@ -149,6 +149,14 @@ The walk uses the Documents `iterator()` (lazy yield, entry-at-a-time) rather th
 
 A soft deadline (`REGISTRY_WALK_TIMEOUT_MS`, 30s) caps the walk's total time. If we hit the deadline mid-iteration, we break cleanly with "partial — deadline reached" in the log line. The `for await` loop over the iterator is cancelled naturally (Node's async iterator protocol calls `return()` on early break, cleaning up the underlying traversal state).
 
+**Gotcha worth knowing:** the Documents `iterator()` method interprets `{ amount: -1 }` differently from the underlying Log `iterator()`. In Log.js, `amount === -1` means "no limit" and the traversal runs to completion. In Documents.js, the loop does `if (count >= amount) break` with no special-case for `-1`, so `1 >= -1` evaluates true and the iteration terminates after the very first entry. Call `dbs.nodes.iterator()` with **no argument** to get unlimited iteration on Documents. Passing `-1` silently truncates to one entry.
+
+#### Per-hash log throttling
+
+Both `safeFetchEntry()` and `safeGetHead()` maintain a per-Log `Map<hash, count>` of unfetchable hashes they've warned about. After the first log per unique hash, subsequent encounters are silent. The throttle is per-process-lifetime — a restart resets it, which is appropriate (a freshly-started process might have a different fetchability picture).
+
+This pairs with the windowed `console.error` filter: console-error-path errors get first-seen + summary, `safeFetchEntry` / `safeGetHead` warnings get once-per-unique-hash. Operators see every unique problem once, and the system doesn't amplify log volume when the same known-bad hashes are re-encountered during subsequent traversals.
+
 #### Why each layer matters at scale
 
 Without layer 0: any single bad entry breaks every read, on every station that has it.
