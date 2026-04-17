@@ -75,6 +75,13 @@ In short: at scale you don't "choose one peer out of a million to talk to." You 
 - ✅ **Event-driven dialer from `wesense.nodes` updates** — subscribes to OrbitDB update events; dials any newly-announced peer that isn't ourselves and isn't already connected.
 - ✅ **Iteration tolerance for orphan blocks** — see "Resilience at scale" below.
 - ✅ **Network-presence-aware registry cleanup** — see "Registry maintenance" below.
+- ✅ **Block-fetch blacklist with 30-day TTL** — blocks that fail 3 times are blacklisted; entries expire after 30 days so returning peers get a fresh chance. See "Block-level fetch backoff" below.
+- ✅ **GC pause monitoring** — built-in via `perf_hooks.PerformanceObserver`; logs any GC event exceeding `GC_PAUSE_WARN_MS` (default 100ms). No NODE_OPTIONS flags needed.
+- ✅ **Log-noise filter** — windowed first-seen + 5-min summary for known transient errors. See "Log-noise filter" below.
+- ✅ **Heap cap** — `ORBITDB_HEAP_MB` env var (default 512MB) bounds v8 old-space via `--max-old-space-size`.
+- ✅ **Zombie gossipsub stream sweep** — detects dead outbound streams by checking `rawStream.status`/`writeStatus`, removes from map, triggers stream recreation. Runs every 10s + on `peer:connect`.
+- ✅ **Event-loop yield in registry walk** — `setTimeout(0)` between entries so yamux keepalive PINGs can fire during traversal.
+- 🔍 **Stream-reset churn investigation** — active. ~30 disconnects/hr/host, root cause not yet identified. See [StreamResetInvestigation.md](https://github.com/wesense-earth/wesense-general-docs/blob/main/general/StreamResetInvestigation.md) for full context.
 - 🧭 **Trust / quality prioritisation framework** — designed as a future hook on the event-driven dialer. See [Phase 2 Plan §4.4](https://github.com/wesense-earth/wesense-general-docs/blob/main/general/Phase2Plan.md).
 - 🧭 **Sync-time availability check** — prevents poison-entry replication. See "Resilience at scale" below for the layered model and where this fits.
 - 🧭 **DCUtR hole-punching for strict-NAT stations** — deferred; lower priority than the registry-based dialer.
