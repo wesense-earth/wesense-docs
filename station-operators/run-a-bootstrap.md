@@ -48,7 +48,7 @@ A pure bootstrap is light:
 
 | Resource | Minimum | Comfortable |
 |----------|---------|-------------|
-| RAM | 1 GB (tight, likely to stream-reset under load) | **2 GB or more** |
+| RAM | 1 GB (tight — GC pressure slows sync) | **2 GB or more** |
 | CPU | 1 vCPU (GC pauses block everything) | 2 vCPU |
 | Disk | 20 GB NVMe | 40 GB+ NVMe |
 | Network | ~10 GB/month metadata | Low — bootstraps don't shuttle bulk data |
@@ -91,16 +91,18 @@ Bootstrap state grows slowly over time (OrbitDB oplog entries: nodes, trust, att
 
 ## Monitoring
 
-A healthy bootstrap shows steady OrbitDB memory usage (RSS stays within your `ORBITDB_HEAP_MB` cap plus modest C++ overhead), a handful of connected peers, and no repeating "stream has been reset" errors in its logs.
+A healthy bootstrap shows steady OrbitDB memory usage (RSS stays within your `ORBITDB_HEAP_MB` cap plus modest C++ overhead), a handful of connected peers, and near-zero `Peer disconnected` events once the network has settled.
 
 Check with:
 
 ```bash
 docker stats wesense-orbitdb
 docker logs -f wesense-orbitdb
+# Disconnect rate over the last hour (expect 0 on a steady network):
+docker logs --since 1h wesense-orbitdb 2>&1 | grep -c 'Peer disconnected'
 ```
 
-If RSS climbs steadily over days, consider lowering `ORBITDB_HEAP_MB` to force earlier GC (bigger is not better — see the `.env.sample` notes). If stream-resets appear frequently, your host is likely under-resourced.
+If RSS climbs steadily over days, consider lowering `ORBITDB_HEAP_MB` to force earlier GC (bigger is not better — see the `.env.sample` notes). If you see a non-trivial ongoing disconnect rate, check that `CONNECTION_MONITOR_ENABLED` isn't set to `true` in your `.env` — see [the stream-reset investigation](https://github.com/wesense-earth/wesense-general-docs/blob/main/general/StreamResetInvestigation.md) for why that default matters.
 
 ## Operational practice
 

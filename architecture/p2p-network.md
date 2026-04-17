@@ -228,36 +228,23 @@ All are transient — the system recovers automatically on next peer connection 
 
 ---
 
-### Stream lifecycle and the reset problem
+### Stream lifecycle and connection teardown
 
-An ongoing known limitation: gossipsub outbound streams between OrbitDB peers sometimes get reset remotely mid-flight (`YamuxStream.onRemoteReset`), producing a cascade of "Cannot write to a stream that is closed" sync errors, a brief disconnect, and an immediate reconnect. The system recovers cleanly — we have a zombie-stream sweep that cleans up post-reset state — but the churn causes:
+For a long time we ran with a ~30-disconnect-per-hour-per-host background rate on every station, accompanied by periodic "Cannot write to a stream that is closed" sync errors. Multiple defensive layers (zombie-stream sweep, iteration tolerance, presence-aware cleanup, heap cap) kept the network functional, and packet capture eventually confirmed that **the application itself was initiating the TCP RSTs mid-traffic** — not a middlebox, not a yamux idle timeout. The investigation is documented in full in [`StreamResetInvestigation.md`](https://github.com/wesense-earth/wesense-general-docs/blob/main/general/StreamResetInvestigation.md).
 
-- Temporary sync interruption until the new stream is established (seconds)
-- Memory churn on the side that keeps re-dialling (historically a leak; now bounded by `ORBITDB_HEAP_MB`)
-- Log noise (now mostly filtered)
+**Root cause.** libp2p 3.x ships with `@libp2p/connection-monitor` enabled by default. Every 10 seconds it opens a `/ipfs/ping/1.0.0` probe stream on each connection, writes 32 random bytes, expects 32 back, and — if any step fails or exceeds its `AdaptiveTimeout` — calls `conn.abort(err)`. That cascades through `muxer.abort` (yamux GoAway frames) → every multiplexed stream aborts → `TCPSocketMultiaddrConnection.abort` → `socket.resetAndDestroy()` → TCP RST on the wire. Under trans-continental RTT and transient event-loop contention (registry walks, sync bursts) roughly 8% of probes timed out, producing the 30/hr/host rate.
 
-**What we know:**
-- The remote peer's yamux initiates the reset (we're the receiver via `onRemoteReset`)
-- It happens regularly, roughly every few minutes, across both the $2 IONOS bootstrap and the Contabo-Germany bootstrap — ruling out specific host environments as the cause
-- All our patches (iteration tolerance, zombie sweep, presence-aware cleanup, heap cap) keep the network functional *despite* the resets
+**Fix.** Connection-monitor is disabled entirely: `createLibp2p({ connectionMonitor: { enabled: false } })`. Nothing in our stack reads `conn.rtt` (the only useful output of the monitor), and yamux keepalive (`enableKeepAlive: true`, `keepAliveInterval: 10_000`, already configured) handles genuinely-dead-connection detection at the lower layer. Two env vars are plumbed for overrides — `CONNECTION_MONITOR_ENABLED` (default false) and `CONNECTION_MONITOR_ABORT` (default false if re-enabled).
 
-**What we don't know:**
-- Whether the remote's yamux is timing out streams it considers idle
-- Whether gossipsub's own mesh prune/graft dynamics are triggering it
-- Whether a middlebox in the path (NAT, ISP stateful firewall) is pruning the TCP connection after some idle threshold and the RESET is a symptom of that
+The monitor's upstream implementation also has a separate bug: on signal-abort during `bs.write`/`bs.read`, the code path skips `stream.close()`, leaking an outbound `/ipfs/ping/1.0.0` stream slot each time. Disabling the monitor avoids this; the leak itself should be fixed upstream with a `finally` clause.
 
-**Current mitigation:**
-Yamux is configured with `enableKeepAlive: true` and `keepAliveInterval: 10_000` (10 seconds — lowered from the default 30s). Keep-alives are single PING frames; they don't carry payload but they do provide regular yamux-level activity that should defeat most idle-timeout-based middleboxes. If the resets are coming from the remote yamux itself (not the network path), this won't help; but it costs almost nothing to have on.
+**Result.** After a full fleet rollout on 2026-04-17, the measured disconnect rate across all 5 hosts over a 30-minute window was **zero** — down from a 25–62/hr baseline. What looked like "normal background churn" for weeks was 100% software self-harm from the upstream default.
 
-**Proper fix:**
-Needs local reproduction with packet capture to distinguish between:
-1. Remote-initiated reset (yamux code on the other side decided to)
-2. Middlebox-initiated reset (a NAT/firewall in between severed the TCP connection, and yamux is reflecting that as a stream reset)
-3. Some interaction with our libp2p-stream-compat shim on the sending side
+**What the defensive layers now do.** They remain deployed as belt-and-braces. Without the cascade the churn was causing, most of them rarely fire, but they guard against future regressions and still handle the genuine edge cases (single-stream protocol errors, peer restart races, brief network blips). The zombie-stream sweep, iteration tolerance, presence-aware cleanup, heap cap, and log-noise filter are all still active.
 
-Until that investigation happens, the reset behaviour is accepted as known-and-handled: functional impact is zero, log impact is minimal after the filter, performance impact is "sync pauses for a few seconds every few minutes".
+**Liveness.** The remaining dead-connection detector is yamux keepalive: a single PING frame sent every 10s at the yamux layer, no application payload. It defeats middlebox idle timeouts and surfaces genuinely broken TCP connections within a bounded window. No probe-abort behaviour — if a yamux keepalive times out, yamux closes the connection gracefully rather than RST'ing it, so no cascade.
 
-Captured as a deferred investigation item in [Phase 2 Plan §4.4](https://github.com/wesense-earth/wesense-general-docs/blob/main/general/Phase2Plan.md) under "libp2p-stream-compat investigation".
+**Upstream.** Two js-libp2p issues worth filing: `abortConnectionOnPingFailure: true` is probably the wrong default for any non-LAN network; and the probe-loop stream leak needs a `finally` fix. Our data across five hosts on three continents supports both.
 
 ---
 
