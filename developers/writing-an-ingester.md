@@ -58,6 +58,7 @@ These are the current ingesters, ordered by complexity:
 | Ingester                         | Data Source                     | Complexity | Why                                                                        |
 | -------------------------------- | ------------------------------- | ---------- | -------------------------------------------------------------------------- |
 | `wesense-ingester-govaq-nz`      | NZ government REST APIs         | Simple     | Polls HTTP APIs, parses JSON/XML, no protobuf                              |
+| `wesense-ingester-govaq-au`      | Australian government APIs      | Simple     | Same pattern as govaq-nz — 6 state/territory adapters                      |
 | `wesense-ingester-homeassistant` | Home Assistant REST + WebSocket | Simple     | JSON payloads, but has loop-prevention logic                               |
 | `wesense-ingester-wesense`       | MQTT + TTN HTTP webhook         | Medium     | WeSense protobuf v2 decoding, LoRa metadata cache                          |
 | `wesense-ingester-meshtastic`    | MQTT (mqtt.meshtastic.org)      | Medium     | Protobuf + AES decryption, position-telemetry correlation with 7-day cache |
@@ -293,8 +294,9 @@ Every reading you produce must include these fields:
 | `board_model`        | str   | Optional    | Hardware model, or empty                                                          |
 | `sensor_model`       | str   | Optional    | Sensor IC model (e.g. `BMP280`), or empty                                         |
 | `calibration_status` | str   | Optional    | `calibrated`, `factory`, or empty                                                 |
-| `transport_type`     | str   | Optional    | Sensor's first-hop connection (`wifi`, `lora`, `lorawan`), or empty               |
+| `sensor_transport`   | str   | Optional    | Sensor's first-hop connection (`wifi`, `lora`, `lorawan`), or empty               |
 | `location_source`    | str   | Optional    | How coordinates were obtained (`gps`, `manual`, `network`)                        |
+| `data_license`       | str   | Recommended | Licence under which the data is published (e.g. `CC-BY-4.0`, `OGL-3.0`)          |
 
 **Standard reading types:**
 
@@ -486,11 +488,17 @@ Ingester Dockerfiles use the parent directory as build context so they can copy 
 
 ```dockerfile
 FROM python:3.11-slim
+
+# setpriv for privilege drop in entrypoint
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    util-linux \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy and install the shared core library
 COPY wesense-ingester-core/ /tmp/wesense-ingester-core/
-RUN pip install --no-cache-dir /tmp/wesense-ingester-core && \
+RUN pip install --no-cache-dir /tmp/wesense-ingester-core/ && \
     rm -rf /tmp/wesense-ingester-core
 
 # Install your ingester's dependencies
@@ -500,11 +508,39 @@ RUN pip install --no-cache-dir -r requirements-docker.txt
 # Copy your ingester code
 COPY wesense-ingester-mydata/mydata_ingester.py .
 COPY wesense-ingester-mydata/adapters/ ./adapters/
+COPY wesense-ingester-mydata/config/ ./config/
+COPY wesense-ingester-mydata/entrypoint.sh .
 
-RUN mkdir -p /app/cache /app/logs
+RUN mkdir -p /app/cache /app/logs /app/data/keys /app/config
 
 ENV TZ=UTC
-CMD ["python", "mydata_ingester.py"]
+ENV PYTHONUNBUFFERED=1
+ENTRYPOINT ["/app/entrypoint.sh"]
+```
+
+**Important:** `python:3.11-slim` strips system timezone data. If your adapters use `ZoneInfo()` (e.g. for timezone-aware timestamp parsing), add `tzdata` to `requirements-docker.txt`:
+
+```
+requests>=2.31.0
+tzdata
+```
+
+### Entrypoint Pattern
+
+All ingesters use a privilege-dropping entrypoint that creates runtime directories, fixes ownership, then drops from root to the configured `PUID:PGID`:
+
+```bash
+#!/bin/bash
+set -e
+
+PUID="${PUID:-1000}"
+PGID="${PGID:-1000}"
+
+mkdir -p /app/cache /app/logs /app/data/keys
+chown -R "$PUID:$PGID" /app/cache /app/logs /app/data
+
+exec setpriv --reuid="$PUID" --regid="$PGID" --clear-groups \
+    python -u govaq_ingester.py "$@"
 ```
 
 Build from the parent directory:
@@ -583,24 +619,52 @@ Add your ingester to `wesense/docker-compose.yml` with its own profile name:
 ingester-mydata:
   image: ghcr.io/wesense-earth/wesense-ingester-mydata:latest
   container_name: wesense-ingester-mydata
-  environment:
-    - GATEWAY_URL=http://storage-broker:8080
-    - MQTT_BROKER=emqx
-    - MQTT_PORT=1883
-    - MQTT_USERNAME=${INGESTER_MYDATA_MQTT_USER:-}
-    - MQTT_PASSWORD=${INGESTER_MYDATA_MQTT_PASS:-}
-    # Your source-specific env vars:
-    - MYDATA_API_URL=${MYDATA_API_URL:-}
-    - POLL_INTERVAL=${MYDATA_POLL_INTERVAL:-300}
-  volumes:
-    - ingester-mydata-cache:/app/cache
-    - ingester-mydata-logs:/app/logs
-  profiles: [ingester-mydata]
+  profiles: ["mydata"]
   depends_on:
     config-check:
       condition: service_completed_successfully
-  restart: unless-stopped
+    storage-broker:
+      condition: service_healthy
+    emqx:
+      condition: service_healthy
+      required: false
+  volumes:
+    - ./ingester-mydata/config:/app/config:ro
+    - ${DATA_DIR:-./data}/ingester-mydata/cache:/app/cache
+    - ${DATA_DIR:-./data}/ingester-mydata/logs:/app/logs
+    - ${DATA_DIR:-./data}/ingester-mydata/keys:/app/data/keys
+    - ${DATA_DIR:-./data}/certs:/app/certs:ro
+  environment:
+    - PUID=${PUID:-1000}
+    - PGID=${PGID:-1000}
+    - GATEWAY_URL=http://storage-broker:8080
+    - WESENSE_OUTPUT_BROKER=${MQTT_HOST:-emqx}
+    - WESENSE_OUTPUT_PORT=${MQTT_PORT:-1883}
+    - WESENSE_OUTPUT_USERNAME=${MQTT_USER}
+    - WESENSE_OUTPUT_PASSWORD=${MQTT_PASSWORD}
+    - POLL_INTERVAL=${MYDATA_POLL_INTERVAL:-300}
+    - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    - TLS_ENABLED=${TLS_ENABLED:-false}
+    - TLS_CA_CERTFILE=/app/certs/ca.pem
+  restart: always
+  networks:
+    - wesense-net
 ```
+
+### Default Config in the Deployment Repo
+
+The config volume mount (`./ingester-mydata/config:/app/config:ro`) means the config must exist on the host filesystem. This is by design — operators can edit the config without rebuilding the image. But it means the default config must ship with the `wesense` deployment repo so it's there when someone clones and runs for the first time.
+
+Create the default config in the deployment repo:
+
+```
+wesense/
+├── ingester-mydata/
+│   └── config/
+│       └── sources.json    # Default config, checked into the wesense repo
+```
+
+This file is what gets bind-mounted into the container. The image also contains a copy (from the Dockerfile `COPY`), but the bind mount takes precedence. If the host directory is missing, the container will fail — which is why the default must ship in the deployment repo.
 
 ## Automated Builds (CI/CD)
 
