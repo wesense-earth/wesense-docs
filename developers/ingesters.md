@@ -11,6 +11,7 @@ Ingesters are the services that connect data sources to the WeSense network. Eac
 | **wesense-ingester-homeassistant** | Home Assistant REST/WebSocket API | Pending testing | Standalone ingester — pulls data from HA via API |
 | **wesense-ha-plugin** | Home Assistant add-on | Coming soon | Native HA integration — will be available in the HACS community store |
 | **wesense-ingester-govaq-nz** | NZ government air quality (ECan + Hilltop councils) | Production | Reference-grade station data |
+| **wesense-ingester-govaq-au** | Australian government air quality (NSW, QLD, ACT + more) | Production | Reference-grade station data from 6 state/territory sources |
 | **wesense-ingester-ecowitt** | Ecowitt weather stations (direct) | Coming soon | Direct integration without Home Assistant |
 
 All production ingesters are deployed as Docker containers via the [deployment profiles](/station-operators/deployment-profiles).

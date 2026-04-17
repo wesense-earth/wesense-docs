@@ -69,6 +69,7 @@ export default withMermaid(defineConfig({
         items: [
           { text: 'Operate a Station', link: '/station-operators/operate-a-station' },
           { text: 'Deployment Profiles', link: '/station-operators/deployment-profiles' },
+          { text: 'Government Air Quality', link: '/station-operators/government-air-quality' },
           { text: 'Run a Bootstrap Node', link: '/station-operators/run-a-bootstrap' },
           { text: 'Contribution Tiers', link: '/station-operators/contribution-tiers' },
           { text: 'Meshtastic Gateway', link: '/getting-started/meshtastic-gateway' },
