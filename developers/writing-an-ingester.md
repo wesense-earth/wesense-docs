@@ -643,13 +643,19 @@ ingester-mydata:
     - WESENSE_OUTPUT_USERNAME=${MQTT_USER}
     - WESENSE_OUTPUT_PASSWORD=${MQTT_PASSWORD}
     - POLL_INTERVAL=${MYDATA_POLL_INTERVAL:-300}
+    # OrbitDB (host-network, reached via host-gateway)
+    - ORBITDB_URL=${ORBITDB_URL:-http://wesense-orbitdb:5200}
     - LOG_LEVEL=${LOG_LEVEL:-INFO}
     - TLS_ENABLED=${TLS_ENABLED:-false}
     - TLS_CA_CERTFILE=/app/certs/ca.pem
+  extra_hosts:
+    - "wesense-orbitdb:host-gateway"
   restart: always
   networks:
     - wesense-net
 ```
+
+**OrbitDB host-gateway:** OrbitDB runs with `network_mode: host` (required for libp2p peer discovery via mDNS and DHT). This means it's not on the Docker bridge network, so other containers can't resolve `wesense-orbitdb` via Docker DNS. The `extra_hosts` directive maps the hostname to the host machine's gateway IP, allowing the ingester to reach OrbitDB's HTTP API on port 5200. Without this, the pipeline's OrbitDB trust registration will fail with `Name or service not known`.
 
 ### Default Config in the Deployment Repo
 
@@ -866,6 +872,32 @@ jobs:
 **Repo secret needed:** `CORE_REPO_TOKEN` — a GitHub personal access token with read access to `wesense-ingester-core`. If your repo is under the `wesense-earth` organisation, this is already configured.
 
 Don't worry if CI/CD isn't your area — if you get the ingester working and submit the code, we can set up the build pipeline for you.
+
+## First Deployment Checklist
+
+After your ingester is built, tested, and has a Docker image on GHCR, there are several steps to get it running in production:
+
+### Repository and CI
+
+1. **Push both `main` and `dev` branches.** CI builds image tags from branch names. If your deployment pulls the `:dev` tag, a `dev` branch must exist or the image won't be found.
+2. **Set GHCR package visibility to public.** GitHub Container Registry packages default to private even when the repo is public. After the first CI build, go to GitHub → Packages → your package → Settings → Change visibility to Public.
+
+### Docker Compose
+
+3. **Add service to `wesense/docker-compose.yml`.** Follow the pattern in [Adding to Docker Compose](#adding-to-docker-compose) above — including the `extra_hosts` for OrbitDB.
+4. **Add default config to the `wesense` deployment repo.** Create `wesense/ingester-mydata/config/` with your default config file. This gets bind-mounted into the container.
+5. **Add profile to `.env.sample`.** Document the new profile name in the "Data source profiles" comment block and add an image override line.
+
+### Respiro (Map)
+
+6. **Verify data appears on the map.** Respiro auto-discovers new `data_source` values from ClickHouse. No code change needed.
+7. **Add freshness threshold.** Add your source to `FRESHNESS_THRESHOLDS` in `wesense-respiro/src/index.js`. Set it slightly longer than the expected reporting interval (e.g. 60 minutes for a source that publishes hourly data polled every 15 minutes). Without this, sensors show as stale between polls.
+8. **Set `data_source_name`.** Ensure your ingester sets a human-readable `data_source_name` on every reading, as Respiro displays this in the UI.
+
+### Performance
+
+9. **Tune API timeouts.** If your source makes one HTTP call per station (as opposed to a bulk feed), use a short timeout (10s) so slow stations don't block the entire poll cycle. Log progress every N stations so operators can see the ingester is working.
+10. **Log progress for slow sources.** An ingester that polls 100+ stations with no intermediate logging appears hung. Log every 10 stations or every 30 seconds.
 
 ## Maintenance
 

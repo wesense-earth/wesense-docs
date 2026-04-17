@@ -599,3 +599,42 @@ Remote guardian:
 **Merge rules:** Remote classifications older than 30 days are ignored (sensor may have moved). UNKNOWN entries are filtered out on both export and import. When applying remote classifications, `node_name` and `latitude`/`longitude` are also backfilled on local ClickHouse rows where those fields are blank — this handles the case where Meshtastic name/position packets haven't arrived yet on the remote guardian.
 
 **Scale consideration:** The current design exports the full snapshot as a single JSON blob. This works for thousands of devices but will need a delta/diff approach before ~50K classified devices. See Phase2Plan.md.
+
+## Respiro Integration
+
+Respiro (the WeSense map) consumes ingester output from ClickHouse and MQTT. Understanding how Respiro discovers and displays data sources is important for ingester authors — a new ingester's data should appear on the map without manual intervention.
+
+### Data source auto-discovery
+
+Respiro dynamically discovers data sources from ClickHouse via `SELECT DISTINCT data_source` on the `sensor_readings` table. The frontend builds filter buttons from the result set. When a new ingester writes readings with a new `data_source` value, Respiro picks it up automatically on the next data load. No code changes are needed for source discovery.
+
+The `data_source_name` field (human-readable label) is used for display if present. Otherwise, Respiro auto-formats the raw `data_source` value (e.g. `govaq_au_nsw` → `Govaq Au Nsw`). Setting `data_source_name` to something meaningful (e.g. "NSW Dept of Planning and Environment") gives a better user experience.
+
+### Freshness thresholds
+
+Respiro uses per-source freshness thresholds to determine whether a sensor reading is "active" or "stale". A reading older than the threshold is greyed out on the map.
+
+The thresholds are currently hardcoded in `wesense-respiro/src/index.js`:
+
+```javascript
+const FRESHNESS_THRESHOLDS = {
+    'wesense': 10 * 60 * 1000,        // 10 minutes
+    'meshtastic': 61 * 60 * 1000,     // 61 minutes
+    'govaq_au_nsw': 60 * 60 * 1000,   // 60 minutes (polls every 15 min, API data hourly)
+    'default': 10 * 60 * 1000         // Conservative default
+};
+```
+
+**Current limitation:** Each new data source must be manually added to this object, otherwise it falls through to the `default` threshold. For government air quality sources that report hourly and are polled every 15 minutes, the default 10-minute threshold causes readings to show as stale between polls.
+
+**Future improvement:** Freshness thresholds should be derived automatically — either from ClickHouse (query the typical interval between readings per source) or from a configurable table that the ingester populates. This would eliminate the manual step when adding new ingesters.
+
+### New ingester deployment checklist
+
+When deploying a new ingester to production, verify these Respiro integration points:
+
+1. **Data appears on map** — Readings are in ClickHouse with correct `data_source`, coordinates, and `reading_type`. Respiro auto-discovers them.
+2. **Source filter works** — The `data_source` value appears as a clickable filter button in the Respiro sidebar.
+3. **Freshness threshold set** — Add the source to `FRESHNESS_THRESHOLDS` in `wesense-respiro/src/index.js` with a value slightly longer than the expected reporting interval. Without this, sensors may flicker between active and stale.
+4. **Display name is readable** — Set `data_source_name` on readings to a human-friendly label.
+5. **Readings have correct units** — Respiro displays the `unit` field as-is. Ensure units are consistent with other sources for the same `reading_type` (e.g. all PM2.5 in µg/m³), or document the divergence.
