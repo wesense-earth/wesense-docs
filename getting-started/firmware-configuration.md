@@ -170,3 +170,16 @@ const unsigned long LORAWAN_TX_INTERVAL_MS = 1200000;  // 20 minutes
 ```
 
 Uncomment the region that matches your location. The default WeSense TTN credentials are built into the firmware. The transmission interval defaults to 20 minutes — see the [Quick Start LoRaWAN section](/getting-started/quick-start#lorawan-no-wifi-needed) for guidance on adjusting this based on your gateway distance.
+
+#### AU915 data rate compatibility (Australia / New Zealand)
+
+AU915 enforces a 400 ms dwell-time limit, which caps the maximum payload per data rate. The firmware's V2 protobuf encoding packs ~35 bytes of header plus 7–9 bytes per sensor, so most realistic sensor sets fit comfortably at DR4 or better:
+
+| Data Rate | Spreading Factor | Max Payload | V2 Sensors That Fit | Range    |
+| --------- | ---------------- | ----------- | ------------------- | -------- |
+| DR2       | SF10             | 11 bytes    | Header only         | Best     |
+| DR3       | SF9              | 53 bytes    | 2 sensors           | Good     |
+| DR4       | SF8              | 125 bytes   | 10 sensors          | Medium   |
+| DR5       | SF7              | 222 bytes   | 12+ sensors (all)   | Shortest |
+
+In practice this means even a marginal gateway link (DR4) can transmit a full WeSense node's worth of readings — temperature, humidity, CO2, VOC/NOx, particulates, pressure — in a single uplink. Devices choose data rate automatically via TTN's ADR (Adaptive Data Rate) based on link quality, so you don't normally configure this directly.
