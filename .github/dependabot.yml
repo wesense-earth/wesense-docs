@@ -9,6 +9,10 @@ updates:
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
+    ignore:
+      # vitepress-plugin-mermaid only allows mermaid 10 or 11; 12 fails npm ci.
+      - dependency-name: "mermaid"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
