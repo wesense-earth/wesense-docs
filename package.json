@@ -1,7 +1,7 @@
 {
   "name": "wesense-docs",
   "version": "1.0.0",
-  "description": "WeSense documentation — guides for contributors, operators, and developers",
+  "description": "WeSense documentation \u2014 guides for contributors, operators, and developers",
   "scripts": {
     "dev": "vitepress dev",
     "build": "vitepress build",
@@ -14,5 +14,8 @@
   "dependencies": {
     "mermaid": "^12.2.0",
     "vitepress-mermaid-renderer": "^1.2.3"
+  },
+  "overrides": {
+    "vite": "^6.4.5"
   }
 }
