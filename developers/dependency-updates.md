@@ -65,6 +65,7 @@ A green build alone does not prove a service still works, so every service that 
 | Rust (archive replicator) | Checks the binary is present and all its shared libraries resolve. The compile step in the build covers API breakage. |
 | Website | The `build` check runs `npm ci`, `npm run lint` and `npm run build`, the same steps `deploy-hostinger.yml` uses to publish the site to the `deploy` branch for Hostinger. The website has no Docker image any more. |
 | `wesense-ingester-core` | Runs its pytest suite (the `test` check). |
+| `wesense-sensor-firmware` | The `test` check runs the protobuf round-trip tests with the protobuf version from `requirements.txt`, and regenerates the nanopb C files from the `.proto` and fails if they differ from the committed ones. The Python packages in `requirements.txt` are build tooling only; nothing from them is compiled into the firmware. |
 
 #### OrbitDB replication test
 
@@ -85,8 +86,8 @@ Branch protection on `main` requires the checks to pass:
 - `build (linux/arm64, ubuntu-24.04-arm)`
 - `build (linux/arm/v7, ubuntu-24.04-arm)` — only for the Node.js repos
 - `replication` — for `wesense-orbitdb`
+- `test` — for `wesense-ingester-core` and `wesense-sensor-firmware`
 - `build` — for `wesense-website` and `wesense-docs`, which have no Docker image (it runs `npm ci`, lint where there is one, and the site build)
-- `test` — for `wesense-ingester-core`
 - `stack-up` and the `compose-config (...)` checks — for the `wesense` deployment repository
 
 The `dependabot-automerge.yml` workflow runs on Dependabot PRs. For a **security fix** or a **patch bump** it waits for the required checks, merges the PR, and then starts the build (see below; for the website, the Hostinger deploy). If a check fails, nothing is merged and the PR stays open for you. A new push to the PR, such as a Dependabot rebase, cancels the old wait and starts again.
@@ -147,7 +148,7 @@ Dependabot is told to leave **Node.js major versions** alone in the Dockerfiles;
 | Repositories on the private Gitea server | GitHub cannot watch them. |
 | `wesense` | Protected by the full-stack test, but nothing auto-merges: its updates are compose image versions, which a person reviews. |
 | `wesense-docs` | Protected (the `build` check is required), but nothing auto-merges: its Dependabot PRs wait for a person. |
-| `wesense-sensor-firmware` | Dependabot PRs open, but there is no branch protection or required check, so nothing auto-merges. |
+| `wesense-sensor-firmware` | Protected (the `test` check is required), but nothing auto-merges. The check covers the Python protobuf tooling only (see below); it does not compile the sketch or run on a board, so firmware changes are tested on a device by a person. |
 
 ## Adding a new repository
 
