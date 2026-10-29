@@ -34,13 +34,16 @@ For LAN-only deployments with self-signed certificates, you'll need to replace t
 
 ### Remote Debug (Telnet)
 
+In `credentials.h`:
+
 ```cpp
-#define ENABLE_SECURE_TELNET true
-#define TELNET_PASSWORD "your_password!"
-#define ALLOWED_TELNET_IP ""
+#define TELNET_PASS "your-own-password"
+#define TELNET_ALLOWED_IP ""
 ```
 
-Enables remote serial monitor access over your network. Set `ALLOWED_TELNET_IP` to restrict access to a specific IP, or leave empty to allow any device on your network. **Change the default password.**
+Telnet is on by default (`ENABLE_SECURE_TELNET` in the sketch) and gives remote serial monitor access over your network. Set `TELNET_ALLOWED_IP` to restrict access to a single IP, or leave it empty to allow any device on your network.
+
+`TELNET_PASS` is compiled into the firmware (a microcontroller has no environment variables, so `credentials.h` plays that role; it is kept out of git). The build **stops with an error** if `TELNET_PASS` is empty or still `CHANGE_THIS_PASSWORD` while telnet is enabled, because an empty password would let anyone log in by pressing Enter and the placeholder is public. To turn telnet off instead, set `ENABLE_SECURE_TELNET` to `false` in the sketch.
 
 ## wesense-sensor-firmware.ino — Device Settings
 
