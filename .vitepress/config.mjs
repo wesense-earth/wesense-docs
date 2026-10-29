@@ -1,7 +1,6 @@
 import { defineConfig } from 'vitepress'
-import { withMermaid } from 'vitepress-plugin-mermaid'
 
-export default withMermaid(defineConfig({
+export default defineConfig({
   title: 'WeSense Docs',
   description: 'Guides for contributors, operators, and developers of the WeSense environmental sensor network',
 
@@ -155,4 +154,4 @@ export default withMermaid(defineConfig({
       copyright: 'Released under the MIT License',
     },
   },
-}))
+})
