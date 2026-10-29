@@ -121,6 +121,14 @@ Upstream security and bug fixes reach WeSense through `wesense-upstream-sync.yml
 
 Merging that PR is not the end: point `wesense-orbitdb` at the new commit (`npm update @orbitdb/core`), and let its CI, including the replication test, decide. Upstreaming our two features would let the fork shrink to nothing; it is tracked in `wesense-orbitdb` issue #41.
 
+## Package overrides
+
+A package override forces a dependency to a version other than the one its parent asks for. We use one only when a security fix exists for a package that its parent has not yet moved to, and we record it here so it gets removed.
+
+| Repository | Override | Why | Remove when |
+|---|---|---|---|
+| `wesense-docs` | `vite` `^6.4.5` | VitePress 1.6.x pins Vite 5, which has no patched release for the Vite and esbuild dev-server advisories. Vite 6.4.5 fixes all of them. VitePress 1.x officially supports Vite 5, so this was checked by building the site, running the dev server and viewing every diagram page. | VitePress 2 is released as stable and the site is moved to it. |
+
 ## Node.js versions
 
 Dependabot is told to leave **Node.js major versions** alone in the Dockerfiles; changing them is a deliberate decision. WeSense is on **Node 22**, not 24, because Node 24 images are not published for 32-bit ARM (`linux/arm/v7`, older Raspberry Pis), which WeSense supports. Node 20 reached end of life on 30 April 2026 and is no longer used anywhere, including the website's GitHub workflow. Revisit this when Node 22 approaches its end of life (30 April 2027) or when 32-bit ARM is dropped.
