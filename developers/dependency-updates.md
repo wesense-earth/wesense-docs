@@ -27,11 +27,11 @@ All work happens on `main`. There is no `dev` branch: a merged fix goes straight
  Security fix or patch bump?
         │yes                         │no (minor / major)
         ▼                            ▼
- GitHub auto-merge turns on     PR waits for you
- (only once checks pass)
+ Workflow waits for the checks,    PR waits for you
+ then merges it
         │
         ▼
- Merged to main  ──►  new image published to ghcr.io  ──►  you get a notification
+ Build started on main  ──►  new image published to ghcr.io  ──►  you get a notification
 ```
 
 ### 1. Finding problems
@@ -70,18 +70,28 @@ Branch protection on `main` requires the checks to pass:
 - `build (linux/arm/v7, ubuntu-24.04-arm)` — only for the Node.js repos and the website
 - `test` — for `wesense-ingester-core`
 
-The `dependabot-automerge.yml` workflow runs on Dependabot PRs. For a **security fix** or a **patch bump** it enables GitHub auto-merge, and GitHub merges the PR as soon as the required checks pass. If a check fails, nothing is merged and the PR stays open for you.
+The `dependabot-automerge.yml` workflow runs on Dependabot PRs. For a **security fix** or a **patch bump** it waits for the required checks, merges the PR, and then starts the build (see below). If a check fails, nothing is merged and the PR stays open for you. A new push to the PR, such as a Dependabot rebase, cancels the old wait and starts again.
 
 Repository admins can still push directly to `main` (for example to fix a broken build); the checks are not enforced against admins.
 
 ### 4. Publishing
 
-Merging to `main` triggers the normal build, which publishes `ghcr.io/wesense-earth/<repo>:latest`. In addition, **every service is rebuilt once a week** (Sunday, 14:00 UTC) even if nothing changed. This matters because:
+Merging to `main` triggers the normal build, which publishes `ghcr.io/wesense-earth/<repo>:latest`.
+
+::: warning Why the workflow starts the build itself
+GitHub deliberately does not start workflows for events caused by the built-in `GITHUB_TOKEN`. A PR merged by the auto-merge workflow therefore does not trigger the usual push build. After merging, the workflow starts the build explicitly (`gh workflow run`), which is the one trigger the built-in token is allowed to use. Do not replace this with GitHub's own "auto-merge" button: it merges, but nothing gets published.
+:::
+
+In addition, **every service is rebuilt once a week** (Sunday, 14:00 UTC) even if nothing changed. This matters because:
 
 - Several Python services declare dependencies as `>=` ranges, which Dependabot cannot bump. A rebuild picks up newer releases of those packages.
 - A rebuild picks up fixed versions of the base image (`python:3.11-slim`, `node`, `debian`, …).
 
-The fix reaches a running station when it pulls the new image. Stations pinned to a release tag (`IMAGE_TAG=1.0.0-alpha.1`) are deliberately not affected.
+### 5. Reaching a station
+
+Stations do not build from these repositories. They run the images through the `wesense` docker-compose deployment, so a fix reaches a running station only when it **pulls the new image** (`docker compose pull && docker compose up -d`, or an automatic updater such as Watchtower). The default `IMAGE_TAG=latest` follows these builds; stations pinned to a release tag (`IMAGE_TAG=1.0.0-alpha.1`) are deliberately not affected.
+
+Because each service is tested on its own, nothing here checks that the services still work *together*. The `wesense` compose repository is where that integration happens, and it currently has no required check of its own.
 
 ## What you will see
 
@@ -111,7 +121,7 @@ The fix reaches a running station when it pulls the new image. Stations pinned t
 1. Copy `.github/dependabot.yml` from a similar repo and adjust the ecosystems.
 2. In **Settings → Advanced Security**, enable Dependabot alerts, security updates, secret scanning, push protection and CodeQL (or use the org-wide defaults).
 3. Add a `smoke` job to its `docker-build.yml` (copy one from a similar repo) and the `.github/smoke/` script it calls.
-4. Add `dependabot-automerge.yml` and enable **Allow auto-merge** in the repo settings.
+4. Add `dependabot-automerge.yml`, listing the workflow files it should start after a merge (normally just `docker-build.yml`). Make sure each of those has a `workflow_dispatch` trigger.
 5. Under **Settings → Branches**, protect `main` and require the checks listed above.
 
 Step 5 matters: without a required check, GitHub merges an auto-merge PR immediately instead of waiting for CI.
