@@ -46,19 +46,29 @@ Each GitHub repository in the `wesense-earth` organisation has these switched on
 - **Secret scanning with push protection** — blocks pushes that contain credentials.
 - **CodeQL** — scans the code itself for common security mistakes.
 
+#### Advisories Dependabot cannot see
+
+Dependabot only knows the advisories in GitHub's reviewed advisory database. Some projects publish security advisories only in their own repository, and those never reach that database. `js-libp2p` (the peer-to-peer library under OrbitDB) did exactly this: several advisories were published there while `npm audit` and Dependabot both reported nothing, and the installed versions were affected. An independent database (OSV.dev) did not have them either, so a different scanner would not have helped.
+
+`wesense-orbitdb` therefore has its own check, `.github/workflows/advisory-check.yml`. Every day, and whenever the lockfile changes, it reads the advisories published by `libp2p/js-libp2p`, `ipfs/helia` and `orbitdb/orbitdb` and compares their vulnerable version ranges with `package-lock.json`. If anything installed is affected it opens one issue (and fails the run); the issue closes itself once nothing is affected. It needs no maintenance unless GitHub changes its API; if it breaks, the run shows as failed. Other repositories do not have this gap today. If a dependency elsewhere starts publishing advisories only upstream, copy the script (`.github/scripts/check-advisories.mjs`) and list that project's repository.
+
 Routine (non-security) updates are **grouped**: all the minor and patch bumps for a repo in one week arrive as a single PR, so a repo produces at most a handful of PRs per week. Security fixes are never grouped; each gets its own PR straight away.
 
 ### 2. Testing
 
-A green build alone does not prove a service still works, so every service has a **smoke test** (the `smoke` check in `docker-build.yml`). It builds the real image and then:
+A green build alone does not prove a service still works, so every service that ships as a Docker image has a **smoke test** (the `smoke` check in `docker-build.yml`). It builds the real image and then:
 
 | Service type | Smoke test |
 |---|---|
 | Python (ingesters, storage broker, live transport, Zenoh API) | Imports every third-party module the code uses, and runs `pip check`. Catches a bump that removes, renames or breaks a package. |
-| Node.js (Respiro, OrbitDB, deployment classifier) | Imports every runtime dependency in `package.json`. |
+| Node.js (Respiro, OrbitDB, deployment classifier) | Imports every runtime dependency in `package.json`. OrbitDB also runs its route tests (`npm test`) and the replication test below. |
 | Rust (archive replicator) | Checks the binary is present and all its shared libraries resolve. The compile step in the build covers API breakage. |
-| Website | Builds the image, starts it and checks it serves the page. The live site is **not** deployed from this image: it is built with `npm run build` by `deploy-hostinger.yml` and published to the `deploy` branch for Hostinger. The image build is only an extra check. |
+| Website | The `build` check runs `npm ci`, `npm run lint` and `npm run build`, the same steps `deploy-hostinger.yml` uses to publish the site to the `deploy` branch for Hostinger. The website has no Docker image any more. |
 | `wesense-ingester-core` | Runs its pytest suite (the `test` check). |
+
+#### OrbitDB replication test
+
+A rolling upgrade means stations run different versions for a while, and OrbitDB can break that without any import failing: a version can start cleanly and still stop exchanging data with the stations already running. `wesense-orbitdb` therefore runs `scripts/replication-test.sh` in CI (the `replication` check). It starts two real containers on a private network, writes a record on each and requires it to appear on the other. It runs three pairings: new with new, the currently published image with the new build, and the new build with the published image. It runs on every pull request, including Dependabot's, and every day, and `replication` is a required check. Run it by hand with `scripts/replication-test.sh <image-A> [image-B]`.
 
 The per-service smoke tests do **not** start the services against live MQTT, ClickHouse or Zenoh. They catch broken dependencies, not broken behaviour. That is why only low-risk updates are merged automatically.
 
@@ -73,11 +83,13 @@ Branch protection on `main` requires the checks to pass:
 - `smoke`
 - `build (linux/amd64, ubuntu-latest)`
 - `build (linux/arm64, ubuntu-24.04-arm)`
-- `build (linux/arm/v7, ubuntu-24.04-arm)` — only for the Node.js repos and the website
+- `build (linux/arm/v7, ubuntu-24.04-arm)` — only for the Node.js repos
+- `replication` — for `wesense-orbitdb`
+- `build` — for `wesense-website` only (it replaces the Docker-based checks above, which the website no longer has)
 - `test` — for `wesense-ingester-core`
 - `stack-up` and the `compose-config (...)` checks — for the `wesense` deployment repository
 
-The `dependabot-automerge.yml` workflow runs on Dependabot PRs. For a **security fix** or a **patch bump** it waits for the required checks, merges the PR, and then starts the build (see below). If a check fails, nothing is merged and the PR stays open for you. A new push to the PR, such as a Dependabot rebase, cancels the old wait and starts again.
+The `dependabot-automerge.yml` workflow runs on Dependabot PRs. For a **security fix** or a **patch bump** it waits for the required checks, merges the PR, and then starts the build (see below; for the website, the Hostinger deploy). If a check fails, nothing is merged and the PR stays open for you. A new push to the PR, such as a Dependabot rebase, cancels the old wait and starts again.
 
 Repository admins can still push directly to `main` (for example to fix a broken build); the checks are not enforced against admins.
 
@@ -98,7 +110,15 @@ In addition, **every service is rebuilt once a week** (Sunday, 14:00 UTC) even i
 
 Stations do not build from these repositories. They run the images through the `wesense` docker-compose deployment, so a fix reaches a running station only when it **pulls the new image** (`docker compose pull && docker compose up -d`, or an automatic updater such as Watchtower). The default `IMAGE_TAG=latest` follows these builds; stations pinned to a release tag (`IMAGE_TAG=1.0.0-alpha.1`) are deliberately not affected.
 
-Each service is tested on its own, and the daily full-stack test (above) checks that the published images still work *together*. Run that test (or look at its latest result under the `wesense` repository's Actions tab) before pulling a new set of images onto a station.
+Stations upgrade at different times, so two versions of a service must work together. For OrbitDB that is what the replication test checks. Each service is tested on its own, and the daily full-stack test (above) checks that the published images still work *together*. Run that test (or look at its latest result under the `wesense` repository's Actions tab) before pulling a new set of images onto a station.
+
+## The OrbitDB fork
+
+`wesense-orbitdb` depends on `wesense-earth/orbitdb`, a fork of upstream `orbitdb/orbitdb`. The branch `wesense-main-v4` is upstream's latest release plus two features upstream does not have yet: time-to-live for oplog entries and tolerance for entries that cannot be fetched. The fork is pinned by commit in `wesense-orbitdb/package-lock.json`.
+
+Upstream security and bug fixes reach WeSense through `wesense-upstream-sync.yml` in the fork. Every Monday it merges the newest stable upstream release into a `sync/<tag>` branch, runs the fork's test suite and opens a pull request into `wesense-main-v4`. If the merge conflicts with our patches, or the tests fail, it opens an issue instead. It never pushes to the integration branch itself. For safety it runs in two jobs: the one that runs upstream code has a read-only token and no stored credentials, and the one with write access runs none of that code.
+
+Merging that PR is not the end: point `wesense-orbitdb` at the new commit (`npm update @orbitdb/core`), and let its CI, including the replication test, decide. Upstreaming our two features would let the fork shrink to nothing; it is tracked in `wesense-orbitdb` issue #41.
 
 ## Node.js versions
 
@@ -123,7 +143,7 @@ Dependabot is told to leave **Node.js major versions** alone in the Dockerfiles;
 |---|---|
 | `wesense-ha-plugin` | Dependabot has no ecosystem for a Home Assistant integration manifest. |
 | `wesense-clickhouse-live`, `wesense-media` | No dependencies. |
-| `orbitdb` (fork) | Alerts only. Version-update PRs on an upstream fork would be noise; the fork is pinned in `wesense-orbitdb/package.json`. |
+| `orbitdb` (fork) | Alerts only (they are all in its test tooling; none of it ships). It is kept current by its own weekly workflow instead, see below. |
 | Repositories on the private Gitea server | GitHub cannot watch them. |
 | `wesense` | Protected by the full-stack test, but nothing auto-merges: its updates are compose image versions, which a person reviews. |
 | `wesense-sensor-firmware`, `wesense-docs` | Dependabot PRs open, but there is no branch protection or required check, so nothing auto-merges. |
@@ -141,5 +161,6 @@ Step 5 matters: without a required check, GitHub merges an auto-merge PR immedia
 ## Limitations worth knowing
 
 - The smoke tests prove packages import and the image builds, not that the service behaves correctly. The daily full-stack test starts every service together, but it does not feed real sensor data through. Behavioural tests would make automatic merging safer.
+- The replication test uses two stations and fresh data. It does not cover many stations, long-running soak, or data written by older versions (check that by hand when a storage library changes major version, for example `blockstore-fs` or `datastore-fs`).
 - A grouped weekly PR can contain a minor bump that is treated like any minor bump: it waits for you, even if most of its contents are patches.
-- If no fixed version of a vulnerable package exists, or the fix needs a major upgrade that conflicts with something else, Dependabot cannot open a PR and the alert stays open.
+- If no fixed version of a vulnerable package exists, or the fix needs a major upgrade that conflicts with something else, Dependabot cannot open a PR and the alert stays open. An advisory that was never added to GitHub's database raises no alert at all; see *Advisories Dependabot cannot see* above for the one check that covers it.
