@@ -1,0 +1,31 @@
+name: CI
+
+# docs.wesense.earth is built and deployed by deploy.yml when main changes. This builds the same
+# site on pull requests, so a change that would break it (including Dependabot updates) is caught
+# before it reaches main. "build" is the required check on main.
+# Details: https://docs.wesense.earth/developers/dependency-updates
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run build
