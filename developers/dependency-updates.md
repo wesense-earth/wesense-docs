@@ -85,7 +85,7 @@ Branch protection on `main` requires the checks to pass:
 - `build (linux/arm64, ubuntu-24.04-arm)`
 - `build (linux/arm/v7, ubuntu-24.04-arm)` — only for the Node.js repos
 - `replication` — for `wesense-orbitdb`
-- `build` — for `wesense-website` only (it replaces the Docker-based checks above, which the website no longer has)
+- `build` — for `wesense-website` and `wesense-docs`, which have no Docker image (it runs `npm ci`, lint where there is one, and the site build)
 - `test` — for `wesense-ingester-core`
 - `stack-up` and the `compose-config (...)` checks — for the `wesense` deployment repository
 
@@ -146,7 +146,8 @@ Dependabot is told to leave **Node.js major versions** alone in the Dockerfiles;
 | `orbitdb` (fork) | Alerts only (they are all in its test tooling; none of it ships). It is kept current by its own weekly workflow instead, see below. |
 | Repositories on the private Gitea server | GitHub cannot watch them. |
 | `wesense` | Protected by the full-stack test, but nothing auto-merges: its updates are compose image versions, which a person reviews. |
-| `wesense-sensor-firmware`, `wesense-docs` | Dependabot PRs open, but there is no branch protection or required check, so nothing auto-merges. |
+| `wesense-docs` | Protected (the `build` check is required), but nothing auto-merges: its Dependabot PRs wait for a person. |
+| `wesense-sensor-firmware` | Dependabot PRs open, but there is no branch protection or required check, so nothing auto-merges. |
 
 ## Adding a new repository
 
