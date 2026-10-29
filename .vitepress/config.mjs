@@ -106,6 +106,7 @@ export default withMermaid(defineConfig({
           { text: 'Writing an Ingester', link: '/developers/writing-an-ingester' },
           { text: 'Data Schema Reference', link: '/developers/data-schema' },
           { text: 'Contributing Code', link: '/developers/contributing-code' },
+          { text: 'Dependency Updates & Security', link: '/developers/dependency-updates' },
         ],
       },
       {
