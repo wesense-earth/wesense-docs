@@ -119,6 +119,8 @@ Stations upgrade at different times, so two versions of a service must work toge
 
 Upstream security and bug fixes reach WeSense through `wesense-upstream-sync.yml` in the fork. Every Monday it merges the newest stable upstream release into a `sync/<tag>` branch, runs the fork's test suite and opens a pull request into `wesense-main-v4`. If the merge conflicts with our patches, or the tests fail, it opens an issue instead. It never pushes to the integration branch itself. For safety it runs in two jobs: the one that runs upstream code has a read-only token and no stored credentials, and the one with write access runs none of that code.
 
+The fork's dev and test tooling (mocha, the linter and their dependencies) is not shipped, but our CI does run it, so it is kept secure like everything else: the lockfile is updated with `npm audit fix` inside upstream's version ranges, plus two overrides in the fork's `package.json` (`@libp2p/webrtc`, `serialize-javascript`) and `@libp2p/gossipsub` 17 for the tests. Upstream's lockfile knows nothing about this, so after every merge the sync job redoes the lockfile update, and if only `package-lock.json` conflicts it takes upstream's and redoes it. Any other conflict still opens an issue. Browser testing (playwright and webpack) is removed from this branch: WeSense runs OrbitDB only in Node, and the browser tests are not run by the sync job.
+
 Merging that PR is not the end: point `wesense-orbitdb` at the new commit (`npm update @orbitdb/core`), and let its CI, including the replication test, decide. Upstreaming our two features would let the fork shrink to nothing; it is tracked in `wesense-orbitdb` issue #41.
 
 ## Package overrides
@@ -152,7 +154,7 @@ Dependabot is told to leave **Node.js major versions** alone in the Dockerfiles;
 |---|---|
 | `wesense-ha-plugin` | Dependabot has no ecosystem for a Home Assistant integration manifest. |
 | `wesense-clickhouse-live`, `wesense-media` | No dependencies. |
-| `orbitdb` (fork) | Alerts only (they are all in its test tooling; none of it ships). It is kept current by its own weekly workflow instead, see below. |
+| `orbitdb` (fork) | Dependabot stays on, with the fork's default branch set to the branch we use (`wesense-main-v4`), and it reports 0 alerts. Its own weekly workflow brings in upstream releases and keeps the dev and test tooling secure, see below. |
 | Repositories on the private Gitea server | GitHub cannot watch them. |
 | `wesense` | Protected by the full-stack test, but nothing auto-merges: its updates are compose image versions, which a person reviews. |
 | `wesense-docs` | Protected (the `build` check is required), but nothing auto-merges: its Dependabot PRs wait for a person. |
