@@ -9,7 +9,7 @@ export default defineConfig({
   ],
 
   themeConfig: {
-    logo: '/logos/logo-solid-dark-cropped.png',
+    logo: '/logos/logo-mark.png',
     siteTitle: 'WeSense',
     logoLink: { link: 'https://wesense.earth/', target: '_self' },
 
