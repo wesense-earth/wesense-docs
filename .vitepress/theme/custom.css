@@ -219,9 +219,14 @@
   /* Logo 24 px from the left edge at every width, as on the other sites.
      VitePress lines it up with the sidebar, centred, so it drifted right
      on wide screens. */
+  /* Both the wrapper and the logo link inside it have class "title" */
   .VPNavBar.has-sidebar .container .title {
     position: static;
     width: auto;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .VPNavBar.has-sidebar .container > .title {
     padding-left: 24px;
     padding-right: 16px;
   }
