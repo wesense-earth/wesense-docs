@@ -40,18 +40,31 @@ Before this, the Dashboard requested `/api/sensors?range=all`. That returned eve
 
 For comparison, the weekly-bucketed `'all'` sparkline over the whole network takes 1.9 s. It is still a full read, which is why no view should ask for it.
 
+## Shared network-wide results
+
+Results that cover the whole network (every device's latest readings for the map, the swarm pool for the Dashboard, the "Add Sensors" device list) are built at most once a minute and shared by every request. Requests that arrive during a build wait for it. Load therefore stays the same however many people are viewing. A failed build is never reused, so errors still reach the caller. The shared endpoints accept only the time ranges the app requests (400 otherwise), so a request cannot create new cache entries or start extra builds.
+
+## Deployment types (migration 010)
+
+Each device's deployment type (indoor/outdoor/mixed/…) comes from the `wesense.device_deployment_types` view:
+
+- **`device_reported_types`**: each device's latest non-empty type as its ingester reported (and signed) it. A materialised view keeps it current on every insert; the migration backfilled it once.
+- **`device_classifications`**: the deployment classifier's decisions, one row per decision, the latest per device winning. The classifier records a batch with a single `INSERT`.
+- **The view** applies the classifier's precedence: an overriding classification (remote imports, `--overwrite`), then the device's own reported type, then the classifier's suggestion for a device that reports none. A remote classification also supplies a name and position where the device's readings have none.
+
+Before this, the classifier stored each decision by rewriting the device's rows in `sensor_readings` with `ALTER TABLE … UPDATE`, and every reader worked out types by scanning all of `sensor_readings`. On yoda the classifier's startup import alone issued a rewrite every few seconds for hours (2,711 devices); each rewrote 13–87 data parts; it never settled, because P2P readings arrive with a blank type; and it broke the readings' signatures. Readings are now never modified after they are stored.
+
+All of this is local and derived: nothing is archived or replicated. Classifications reach other stations through the classifier's snapshot exchange over iroh, as before.
+
 ## Remaining full-history reads
 
-These still read all history on every call and grow with the archive:
+- **`/api/devices`**, the list behind "Add Sensors" search (3.9 s, 4.5 MB on the machine above). It is now built at most once a minute and shared, but each build still scans all history.
 
-- **Deployment-type backfill** (`queryDeviceDeploymentTypes` with no device filter). Each sensor's deployment type (indoor/outdoor/mixed) is taken from its most recent row that has one, across all time. It runs on every `/api/sensors` call, map and dashboard.
-- **`/api/devices`**, the list behind "Add Sensors" search (3.9 s, 4.5 MB on the machine above).
-
-The planned fix for both is the latest-per-sensor table below.
+The planned fix is the latest-per-sensor table below.
 
 ## Planned: latest-per-sensor table
 
-**Status:** proposed, not built. This section records the design and its consequences before any code is written.
+**Status:** proposed, not built. Its prerequisite, moving the classifier off in-place rewrites, is done (migration 010).
 
 ### What it is
 
@@ -74,15 +87,11 @@ No WeSense service writes to it. ClickHouse maintains it as a **materialised vie
 | Storage broker (this station's ingesters) | `INSERT` | Yes |
 | Live transport, inbound from other stations over Zenoh (`received_via = 'p2p'`) | `INSERT` | Yes |
 | Any future import of archives into ClickHouse | `INSERT` | Yes, automatically |
-| Deployment classifier (deployment type, node name, position) | `ALTER TABLE … UPDATE` | **No** |
+| Deployment classifier | `INSERT` into its own table (migration 010) | Not needed: it no longer modifies readings |
 
-### The catch: the deployment classifier
+### The deployment classifier (done)
 
-A materialised view sees only inserts. The deployment classifier does not insert; it rewrites existing `sensor_readings` rows in place with `ALTER TABLE … UPDATE` (a ClickHouse *mutation*). Those changes would never reach the latest table, which would keep showing a sensor's old or empty deployment type.
-
-The same pattern is why Respiro needs a full-history lookup for deployment types today. Mutations are also expensive: each one rewrites every data part that contains the device, which on a Raspberry Pi means rewriting large parts of a 20-million-row table.
-
-So the classifier changes first. It writes its results (deployment type, name, position, and their source) to a small table of its own, one row per device, with an `INSERT` per decision. Respiro reads deployment types from there instead of from `sensor_readings`. The classifier's results are already shared between guardians as an iroh blob, so this changes where they are stored locally, not how they replicate.
+A materialised view sees only inserts, so it would have missed the classifier's in-place rewrites of `sensor_readings`. That was the prerequisite for this table, and it is done: the classifier now records decisions in its own table (see *Deployment types* above) and readings are never modified after they are stored.
 
 ### P2P and archives
 
@@ -102,5 +111,5 @@ A materialised view only sees inserts made after it is created. Creating it on a
 ### Rollout
 
 - Schema: a new migration in `wesense-clickhouse-live`, copied into `wesense/clickhouse/migrations`, so every station gets it on upgrade.
-- Order: (1) classifier writes to its own table and Respiro reads deployment types from it; (2) add the latest table with its backfill; (3) switch Respiro's latest-reading queries to it.
+- Order: (1) classifier writes to its own table and Respiro reads deployment types from it (done, migration 010); (2) add the latest table with its backfill; (3) switch Respiro's latest-reading queries to it.
 - Each step works on its own and can be released separately.
