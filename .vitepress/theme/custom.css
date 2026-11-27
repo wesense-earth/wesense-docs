@@ -196,14 +196,45 @@
    .VPNavBar .VPNavBarMenu to outrank VitePress's own menu styles.
    ============================================ */
 @media (min-width: 960px) {
+  /* Menu straight after the logo; search moves to the right beside the theme
+     toggle. VitePress lets search grow to fill the bar, which pushed the menu
+     right on wide screens. */
   .VPNavBar .content-body {
     justify-content: flex-start;
   }
   .VPNavBar .content-body .VPNavBarMenu {
-    margin-left: 24px;
+    order: 1;
+    margin-left: 8px;
   }
-  .VPNavBar .content-body .VPNavBarMenu + * {
+  .VPNavBar .content-body .VPNavBarSearch {
+    order: 2;
+    flex-grow: 0;
     margin-left: auto;
+    padding-left: 16px;
+  }
+  .VPNavBar .content-body > :not(.VPNavBarMenu):not(.VPNavBarSearch) {
+    order: 3;
+  }
+
+  /* Logo 24 px from the left edge at every width, as on the other sites.
+     VitePress lines it up with the sidebar, centred, so it drifted right
+     on wide screens. */
+  .VPNavBar.has-sidebar .container .title {
+    position: static;
+    width: auto;
+    padding-left: 24px;
+    padding-right: 16px;
+  }
+  .VPNavBar.has-sidebar .container .content {
+    padding-left: 0;
+    padding-right: 24px;
+  }
+  /* One full-width line under the header (it was split at the sidebar edge) */
+  .VPNavBar.has-sidebar .container .title {
+    border-bottom-color: transparent;
+  }
+  .VPNavBar.has-sidebar .divider.divider.divider {
+    padding-left: 0;
   }
 }
 
