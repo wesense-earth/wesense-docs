@@ -204,7 +204,7 @@
   }
   .VPNavBar .content-body .VPNavBarMenu {
     order: 1;
-    margin-left: 8px;
+    margin-left: 13px;
   }
   .VPNavBar .content-body .VPNavBarSearch {
     order: 2;
@@ -302,4 +302,33 @@
   .VPNavBar .VPNavBarMenu .VPNavBarMenuLink[href^="https://wesense.earth/#"] {
     display: none;
   }
+}
+
+/* ============================================
+   Header shared with wesense.earth and the map: 32 px leaf mark,
+   "WeSense" wordmark in DM Sans 18 px bold (brand colours), menu in
+   DM Sans 14 px.
+   ============================================ */
+.VPNavBarTitle .title .logo {
+  height: 32px;
+  width: 32px;
+  margin-right: 10px;
+}
+
+.VPNavBarTitle .title span {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #2D6A4F; /* Canopy Green on light */
+}
+
+.dark .VPNavBarTitle .title span {
+  color: #52B788; /* Fern on dark */
+}
+
+.VPNavBar .VPNavBarMenu .VPNavBarMenuLink,
+.VPNavBar .VPNavBarMenu .VPNavBarMenuGroup .button {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 14px;
 }
