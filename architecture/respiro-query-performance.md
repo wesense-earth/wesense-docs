@@ -56,15 +56,11 @@ Before this, the classifier stored each decision by rewriting the device's rows 
 
 All of this is local and derived: nothing is archived or replicated. Classifications reach other stations through the classifier's snapshot exchange over iroh, as before.
 
-## Remaining full-history reads
+## Latest-per-sensor table (migration 011)
 
-- **`/api/devices`**, the list behind "Add Sensors" search (3.9 s, 4.5 MB on the machine above). It is now built at most once a minute and shared, but each build still scans all history.
+**Status:** built. The map, the Dashboard (your sensors and the swarm pool) and the "Add Sensors" device list read `wesense.sensor_latest`; none of them scans `sensor_readings` for latest values any more. Compared with the previous full-scan queries on the same data, readings, timestamps and positions are identical. One deliberate difference: a sensor whose recent readings carry no name shows its last known name instead of its device ID.
 
-The planned fix is the latest-per-sensor table below.
-
-## Planned: latest-per-sensor table
-
-**Status:** proposed, not built. Its prerequisite, moving the classifier off in-place rewrites, is done (migration 010).
+`reading_count` in the device list is readings *received*: the backfill counted stored rows once, and afterwards every insert adds to it, so a re-sent duplicate counts twice.
 
 ### What it is
 
@@ -110,6 +106,8 @@ A materialised view only sees inserts made after it is created. Creating it on a
 
 ### Rollout
 
-- Schema: a new migration in `wesense-clickhouse-live`, copied into `wesense/clickhouse/migrations`, so every station gets it on upgrade.
-- Order: (1) classifier writes to its own table and Respiro reads deployment types from it (done, migration 010); (2) add the latest table with its backfill; (3) switch Respiro's latest-reading queries to it.
-- Each step works on its own and can be released separately.
+Migration 011 in `wesense-clickhouse-live` and `wesense/clickhouse/migrations`, applied when ClickHouse starts. It requires migration 010 (the classifier no longer rewrites readings), and Respiro requires migration 011.
+
+## Background work yields to readers
+
+The archive builder, its scheduler and the signed-field repair run their ClickHouse queries with `priority = 10` and `max_threads = 1`. ClickHouse pauses them while interactive queries run, so a large archive or repair job no longer slows the map and Dashboard.
