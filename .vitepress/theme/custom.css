@@ -234,6 +234,19 @@
     padding-left: 0;
     padding-right: 24px;
   }
+  /* Pages without a sidebar (the home page): VitePress pads the header 32 px
+     and centres it within 1376 px, so the logo drifted right on wide screens */
+  .VPNavBar:not(.has-sidebar) .wrapper.wrapper {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  .VPNavBar:not(.has-sidebar) .wrapper .container.container {
+    max-width: none;
+  }
+  .VPNavBar:not(.has-sidebar) .container > .title.title {
+    padding-right: 16px;
+  }
+
   /* One full-width line under the header (it was split at the sidebar edge) */
   .VPNavBar.has-sidebar .container .title {
     border-bottom-color: transparent;
