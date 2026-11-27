@@ -47,4 +47,60 @@ These still read all history on every call and grow with the archive:
 - **Deployment-type backfill** (`queryDeviceDeploymentTypes` with no device filter). Each sensor's deployment type (indoor/outdoor/mixed) is taken from its most recent row that has one, across all time. It runs on every `/api/sensors` call, map and dashboard.
 - **`/api/devices`**, the list behind "Add Sensors" search (3.9 s, 4.5 MB on the machine above).
 
-The planned fix for both is a small "latest per device" table maintained by ClickHouse (a materialised view), whose size depends on the number of sensors rather than the length of history.
+The planned fix for both is the latest-per-sensor table below.
+
+## Planned: latest-per-sensor table
+
+**Status:** proposed, not built. This section records the design and its consequences before any code is written.
+
+### What it is
+
+A second, small ClickHouse table holding one row per `(device_id, reading_type)`: the most recent value, its timestamp, and the device's metadata (name, position, source, board, units). Its size depends on the number of sensors, not on how much history is stored: about 100,000 rows for 9,000 sensors, whether `sensor_readings` holds one month or three years.
+
+"Latest reading for every sensor" then becomes a read of that small table instead of a scan of all history. The map, the Dashboard, the "Add Sensors" list and the deployment-type lookup would all use it.
+
+### How rows get there
+
+No WeSense service writes to it. ClickHouse maintains it as a **materialised view**, which behaves like an insert trigger:
+
+- Every `INSERT` into `sensor_readings` also runs a small query over just the inserted batch and writes the result into the latest table, as part of the same insert.
+- If that step fails, the insert fails. The two tables cannot silently drift apart.
+- The table keeps the newest row per sensor and reading type by `timestamp` (an `AggregatingMergeTree` with `argMax` state, or a `ReplacingMergeTree` versioned on `timestamp`). A reading that arrives late, or twice, never replaces a newer one.
+
+### Every write path feeds it
+
+| Path | Writes with | Feeds the latest table |
+|---|---|---|
+| Storage broker (this station's ingesters) | `INSERT` | Yes |
+| Live transport, inbound from other stations over Zenoh (`received_via = 'p2p'`) | `INSERT` | Yes |
+| Any future import of archives into ClickHouse | `INSERT` | Yes, automatically |
+| Deployment classifier (deployment type, node name, position) | `ALTER TABLE … UPDATE` | **No** |
+
+### The catch: the deployment classifier
+
+A materialised view sees only inserts. The deployment classifier does not insert; it rewrites existing `sensor_readings` rows in place with `ALTER TABLE … UPDATE` (a ClickHouse *mutation*). Those changes would never reach the latest table, which would keep showing a sensor's old or empty deployment type.
+
+The same pattern is why Respiro needs a full-history lookup for deployment types today. Mutations are also expensive: each one rewrites every data part that contains the device, which on a Raspberry Pi means rewriting large parts of a 20-million-row table.
+
+So the classifier changes first. It writes its results (deployment type, name, position, and their source) to a small table of its own, one row per device, with an `INSERT` per decision. Respiro reads deployment types from there instead of from `sensor_readings`. The classifier's results are already shared between guardians as an iroh blob, so this changes where they are stored locally, not how they replicate.
+
+### P2P and archives
+
+- The latest table is **local and derived**. It is never archived, never replicated and never sent over Zenoh or iroh.
+- Each station builds its own from whatever reaches its `sensor_readings`, so it reflects exactly what that station has received, as Respiro does today.
+- Parquet archives, signatures, Zenoh and iroh are unchanged. No protocol or archive format changes.
+- A station that rebuilds its ClickHouse rebuilds the latest table in the same way (see backfill below).
+
+### Existing data
+
+A materialised view only sees inserts made after it is created. Creating it on a station with existing data needs a one-off backfill: a single `INSERT … SELECT` over all of `sensor_readings`, the same full scan Respiro pays on every page load today, paid once. The migration runs it.
+
+### Expiry
+
+`sensor_readings` deletes rows older than 3 years (its TTL). The latest table does not inherit that rule. Without its own expiry, a sensor that went silent years ago, and whose readings have all been deleted, would stay in the latest table forever. It gets a matching rule: drop a row once its `timestamp` is older than the `sensor_readings` TTL.
+
+### Rollout
+
+- Schema: a new migration in `wesense-clickhouse-live`, copied into `wesense/clickhouse/migrations`, so every station gets it on upgrade.
+- Order: (1) classifier writes to its own table and Respiro reads deployment types from it; (2) add the latest table with its backfill; (3) switch Respiro's latest-reading queries to it.
+- Each step works on its own and can be released separately.
