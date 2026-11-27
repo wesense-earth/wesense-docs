@@ -11,14 +11,39 @@ export default defineConfig({
   themeConfig: {
     logo: '/logos/logo-solid-dark-cropped.png',
     siteTitle: 'WeSense',
+    logoLink: { link: 'https://wesense.earth/', target: '_self' },
 
+    // Same menu as wesense.earth and map.wesense.earth: the app's views first,
+    // then the site's sections; this site's own sections sit under Docs.
     nav: [
-      { text: 'Features', link: '/features' },
-      { text: 'Get Started', link: '/getting-started/quick-start' },
-      { text: 'Run a Station', link: '/station-operators/operate-a-station' },
-      { text: 'Architecture', link: '/architecture/' },
-      { text: 'Live Map', link: 'https://map.wesense.earth/#map&zoom=3' },
-      { text: 'wesense.earth', link: 'https://wesense.earth' },
+      { text: 'Dashboard', link: 'https://map.wesense.earth/#dashboard', target: '_self' },
+      { text: 'Map', link: 'https://map.wesense.earth/#map', target: '_self' },
+      { text: 'Stats', link: 'https://map.wesense.earth/#stats', target: '_self' },
+      { text: 'Home', link: 'https://wesense.earth/', target: '_self' },
+      { text: 'Mission', link: 'https://wesense.earth/#mission', target: '_self' },
+      { text: 'The Why', link: 'https://wesense.earth/#why', target: '_self' },
+      { text: 'How It Works', link: 'https://wesense.earth/#how', target: '_self' },
+      { text: 'Vision', link: 'https://wesense.earth/#vision', target: '_self' },
+      { text: 'Roadmap', link: 'https://wesense.earth/#roadmap', target: '_self' },
+      { text: 'Contribute', link: 'https://wesense.earth/#contribute', target: '_self' },
+      {
+        text: 'Docs',
+        items: [
+          { text: 'Docs home', link: '/' },
+          { text: 'Features', link: '/features' },
+          { text: 'Get Started', link: '/getting-started/quick-start' },
+          { text: 'Run a Station', link: '/station-operators/operate-a-station' },
+          { text: 'Architecture', link: '/architecture/' },
+          {
+            // In the menu rather than as icons, which pushed past the right edge
+            text: 'Community',
+            items: [
+              { text: 'GitHub', link: 'https://github.com/wesense-earth' },
+              { text: 'Mastodon', link: 'https://mastodon.wesense.earth/@wesense' },
+            ],
+          },
+        ],
+      },
     ],
 
     sidebar: [
@@ -134,11 +159,6 @@ export default defineConfig({
           { text: 'Terms of Service', link: '/about/terms-of-service' },
         ],
       },
-    ],
-
-    socialLinks: [
-      { icon: 'github', link: 'https://github.com/wesense-earth' },
-      { icon: 'mastodon', link: 'https://mastodon.wesense.earth/@wesense' },
     ],
 
     editLink: {

@@ -188,3 +188,69 @@
 .VPFooter {
   border-top: 1px solid var(--vp-c-border) !important;
 }
+
+/* ============================================
+   Top menu: same layout as wesense.earth and the map.
+   Menu left-aligned after the logo; Dashboard, Map and Stats as
+   buttons; a divider before the site's sections. Selectors start at
+   .VPNavBar .VPNavBarMenu to outrank VitePress's own menu styles.
+   ============================================ */
+@media (min-width: 960px) {
+  .VPNavBar .content-body {
+    justify-content: flex-start;
+  }
+  .VPNavBar .content-body .VPNavBarMenu {
+    margin-left: 24px;
+  }
+  .VPNavBar .content-body .VPNavBarMenu + * {
+    margin-left: auto;
+  }
+}
+
+.VPNavBar .VPNavBarMenu {
+  align-items: center;
+}
+
+/* No external-link arrows: the WeSense sites are one product */
+.VPNavBar .VPNavBarMenu .VPNavBarMenuLink.vp-external-link-icon::after {
+  display: none;
+}
+
+.VPNavBar .VPNavBarMenu .VPNavBarMenuLink {
+  padding: 0 9px;
+}
+
+.VPNavBar .VPNavBarMenu .VPNavBarMenuLink[href^="https://map.wesense.earth"] {
+  height: 32px;
+  line-height: 32px;
+  margin: 0 3px;
+  padding: 0 14px;
+  border-radius: 4px;
+  background-color: rgba(45, 106, 79, 0.08);
+  font-weight: 600;
+  color: var(--vp-c-brand-1);
+}
+
+.VPNavBar .VPNavBarMenu .VPNavBarMenuLink[href^="https://map.wesense.earth"]:hover {
+  background-color: rgba(45, 106, 79, 0.16);
+}
+
+.dark .VPNavBar .VPNavBarMenu .VPNavBarMenuLink[href^="https://map.wesense.earth"] {
+  background-color: rgba(82, 183, 136, 0.12);
+}
+
+.VPNavBar .VPNavBarMenu .VPNavBarMenuLink[href="https://wesense.earth/"]::before {
+  content: "|";
+  color: var(--vp-c-divider);
+  font-size: 20px;
+  font-weight: 300;
+  margin: 0 14px 0 4px;
+}
+
+/* Not enough room for the website's section links beside search below
+   1280 px: keep the app views, Home and Docs (as on the map) */
+@media (max-width: 1279px) {
+  .VPNavBar .VPNavBarMenu .VPNavBarMenuLink[href^="https://wesense.earth/#"] {
+    display: none;
+  }
+}
