@@ -94,6 +94,7 @@ export default defineConfig({
           { text: 'Data Quality', link: '/architecture/data-quality' },
           { text: 'Governance & Trust', link: '/architecture/governance-and-trust' },
           { text: 'Data Licensing', link: '/architecture/data-licensing' },
+          { text: 'Respiro Query Performance', link: '/architecture/respiro-query-performance' },
           { text: 'Future Ideas', link: '/architecture/future' },
         ],
       },
